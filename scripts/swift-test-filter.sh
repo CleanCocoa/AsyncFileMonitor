@@ -67,8 +67,20 @@ while IFS= read -r line; do
         continue
     fi
     
-    # Extract executed test count from detailed summary (e.g. "Executed 8 tests, with 0 failures")
-    if [[ "$line" =~ Executed[[:space:]]+([0-9]+)[[:space:]]+tests,.*with[[:space:]]+([0-9]+)[[:space:]]+failures ]]; then
+    # Extract executed test count from "All tests" summary line
+    if [[ "$line" =~ Test[[:space:]]+Suite[[:space:]]+\'All[[:space:]]+tests\'[[:space:]]+passed ]] || [[ "$line" =~ Test[[:space:]]+Suite[[:space:]]+\'All[[:space:]]+tests\'[[:space:]]+failed ]]; then
+        # Read the next line which contains the actual count
+        if IFS= read -r next_line; then
+            if [[ "$next_line" =~ Executed[[:space:]]+([0-9]+)[[:space:]]+test ]]; then
+                EXECUTED_TESTS="${BASH_REMATCH[1]}"
+            fi
+            # Don't output these lines as we'll show them in the summary
+        fi
+        continue
+    fi
+    
+    # Also capture from other "Executed X tests" lines
+    if [[ "$line" =~ Executed[[:space:]]+([0-9]+)[[:space:]]+tests?,.*with[[:space:]]+([0-9]+)[[:space:]]+failures? ]]; then
         EXECUTED_TESTS="${BASH_REMATCH[1]}"
         ACTUAL_FAILURES="${BASH_REMATCH[2]}"
         continue
