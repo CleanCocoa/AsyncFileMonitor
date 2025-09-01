@@ -137,15 +137,16 @@ private final class StreamHandler: @unchecked Sendable {
 }
 
 // Static callback function for FSEvents
-private let fsEventCallback: FSEventStreamCallback = { (
-	stream: ConstFSEventStreamRef,
-	contextInfo: UnsafeMutableRawPointer?,
-	numEvents: Int,
-	eventPaths: UnsafeMutableRawPointer,
-	eventFlags: UnsafePointer<FSEventStreamEventFlags>,
-	eventIDs: UnsafePointer<FSEventStreamEventId>
-) in
-    guard let contextInfo else { preconditionFailure("Opaque pointer missing StreamHandler") }
+private let fsEventCallback: FSEventStreamCallback = {
+	(
+		stream: ConstFSEventStreamRef,
+		contextInfo: UnsafeMutableRawPointer?,
+		numEvents: Int,
+		eventPaths: UnsafeMutableRawPointer,
+		eventFlags: UnsafePointer<FSEventStreamEventFlags>,
+		eventIDs: UnsafePointer<FSEventStreamEventId>
+	) in
+	guard let contextInfo else { preconditionFailure("Opaque pointer missing StreamHandler") }
 	let handler = Unmanaged<StreamHandler>.fromOpaque(contextInfo).takeUnretainedValue()
 
 	guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
