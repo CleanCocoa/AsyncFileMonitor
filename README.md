@@ -19,31 +19,37 @@ AsyncFileMonitor is the modernized successor to RxFileMonitor, providing the sam
 
 ## Usage
 
-### Basic File Monitoring with AsyncStream
+### Direct AsyncStream API
 
 ```swift
 import AsyncFileMonitor
 
-// Monitor a directory
-let monitor = FolderContentMonitor(url: URL(fileURLWithPath: "/path/to/monitor/"))
+// Monitor a directory using the convenience API
+let eventStream = AsyncFileMonitor.monitor(url: URL(fileURLWithPath: "/path/to/monitor/"))
 
 // Use async/await to process events
-for await event in monitor.events {
+for await event in eventStream {
     print("File changed: \(event.filename) at \(event.eventPath)")
     print("Change type: \(event.change)")
 }
 ```
 
-### Convenience API
+### Two-Step API (Create Monitor, Then Stream)
 
 ```swift
 import AsyncFileMonitor
 
-// Create monitor using convenience method
-let monitor = AsyncFileMonitor.monitor(url: URL(fileURLWithPath: "/Users/you/Documents"))
+// Create a monitor with specific settings
+let monitor = FolderContentMonitor(
+    url: URL(fileURLWithPath: "/Users/you/Documents"),
+    latency: 0.5  // Coalesce rapid changes
+)
+
+// Create an AsyncStream from the monitor
+let eventStream = monitor.makeAsyncStream()
 
 // Process file events
-for await event in monitor.events {
+for await event in eventStream {
     // Filter for file changes only
     guard event.change.contains(.isFile) else { continue }
     
@@ -57,10 +63,12 @@ for await event in monitor.events {
 ### Monitoring Multiple Paths
 
 ```swift
-let paths = ["/Users/you/Documents", "/Users/you/Desktop"]
-let monitor = AsyncFileMonitor.monitor(paths: paths)
+let eventStream = AsyncFileMonitor.monitor(paths: [
+    "/Users/you/Documents", 
+    "/Users/you/Desktop"
+])
 
-for await event in monitor.events {
+for await event in eventStream {
     print("Change in \(event.eventPath): \(event.change)")
 }
 ```
@@ -68,10 +76,10 @@ for await event in monitor.events {
 ### Task-based Processing
 
 ```swift
-let monitor = FolderContentMonitor(url: folderURL)
+let eventStream = AsyncFileMonitor.monitor(url: folderURL)
 
 let monitorTask = Task {
-    for await event in monitor.events {
+    for await event in eventStream {
         // Process file events
         await handleFileChange(event)
     }
@@ -81,18 +89,47 @@ let monitorTask = Task {
 monitorTask.cancel()
 ```
 
-### Error Handling with ThrowingStream
+### Filtering Events
 
 ```swift
-let monitor = FolderContentMonitor(url: folderURL)
+let eventStream = AsyncFileMonitor.monitor(url: documentsURL)
 
-do {
-    for try await event in monitor.throwingEvents {
-        // Process events with error handling capability
-        print("Event: \(event)")
+for await event in eventStream
+where event.change.contains(.isFile) && event.change.contains(.modified) {
+    await processModifiedFile(event.url)
+}
+```
+
+### Multiple Concurrent Streams
+
+A single monitor can serve multiple AsyncStreams simultaneously. All streams will receive the same events:
+
+```swift
+let monitor = FolderContentMonitor(url: documentsURL)
+
+// Create multiple streams from the same monitor
+let uiUpdateStream = monitor.makeAsyncStream()
+let backupStream = monitor.makeAsyncStream()
+let logStream = monitor.makeAsyncStream()
+
+// Process events differently in each stream
+Task {
+    for await event in uiUpdateStream {
+        await updateUI(for: event)
     }
-} catch {
-    print("Monitoring error: \(error)")
+}
+
+Task {
+    for await event in backupStream {
+        guard event.change.contains(.modified) else { continue }
+        await backupFile(event.url)
+    }
+}
+
+Task {
+    for await event in logStream {
+        logger.info("File changed: \(event.filename)")
+    }
 }
 ```
 
@@ -134,7 +171,7 @@ A latency of 0.0 can produce too much noise when applications make multiple rapi
 
 ## Understanding File Events
 
-Different applications generate different event patterns:
+Different applications can generate different event patterns:
 
 ### TextEdit (atomic saves):
 ```
@@ -175,7 +212,7 @@ Or add it through Xcode:
 
 ## Migration from RxFileMonitor
 
-AsyncFileMonitor provides the same core functionality as RxFileMonitor but with modern Swift concurrency:
+AsyncFileMonitor provides the same core functionality as [RxFileMonitor](https://github.com/RxSwiftCommunity/RxFileMonitor/) but with modern Swift concurrency:
 
 ### Before (RxFileMonitor)
 ```swift
@@ -193,12 +230,26 @@ monitor.rx.folderContentChange
 ```
 
 ### After (AsyncFileMonitor)
+
+**Option 1: Direct convenience API**
+```swift
+import AsyncFileMonitor
+
+let eventStream = AsyncFileMonitor.monitor(url: folderUrl)
+
+for await event in eventStream {
+    print("File changed: \(event.filename)")
+}
+```
+
+**Option 2: Two-step approach**
 ```swift
 import AsyncFileMonitor
 
 let monitor = FolderContentMonitor(url: folderUrl)
+let eventStream = monitor.makeAsyncStream()
 
-for await event in monitor.events {
+for await event in eventStream {
     print("File changed: \(event.filename)")
 }
 ```
