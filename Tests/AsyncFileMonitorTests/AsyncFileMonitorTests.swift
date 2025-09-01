@@ -35,54 +35,42 @@ func fileMonitoringIntegration() async throws {
 	// Set up monitor with a small latency to coalesce rapid changes
 	let eventStream = FolderContentMonitor.monitor(url: tempDir, latency: 0.1)
 
-	// Monitor events and wait for the expected ones
-	let eventsReceived = await withCheckedContinuation { continuation in
-		var receivedEvents: [FolderContentChangeEvent] = []
+	// Monitor events and confirm we receive the expected ones
+	try await confirmation("Receive file system events", expectedCount: 2) { confirm in
+		var confirmationCount = 0
 
 		let monitorTask = Task {
 			for await event in eventStream {
-				receivedEvents.append(event)
-
-				// Check if we've received the specific events we're looking for:
+				// Confirm specific events we're looking for:
 				// - b.txt with removed flag
 				// - d.txt with either created or renamed flag (atomic saves use rename)
-				let bDeleted = receivedEvents.contains {
-					$0.matches(filename: "b.txt", change: .removed)
-				}
-				let dCreated = receivedEvents.contains { event in
-					event.matches(filename: "d.txt", change: .created)
-						|| event.matches(filename: "d.txt", change: .renamed)
+				if event.matches(filename: "b.txt", change: .removed) {
+					confirm(count: 1)
+					confirmationCount += 1
+				} else if event.matches(filename: "d.txt", change: .created)
+					|| event.matches(filename: "d.txt", change: .renamed)
+				{
+					confirm(count: 1)
+					confirmationCount += 1
 				}
 
-				if bDeleted && dCreated {
-					continuation.resume(returning: true)
+				// Break early once we have both confirmations
+				if confirmationCount >= 2 {
 					break
 				}
 			}
 		}
 
-		// Set up timeout
-		let timeoutTask = Task {
-			try await Task.sleep(nanoseconds: 5_000_000_000)  // 5 seconds
-			continuation.resume(returning: false)
-			monitorTask.cancel()
-		}
-
 		// Give the monitor time to start up, then make the file changes
-		Task {
+		try await Task {
 			try await Task.sleep(nanoseconds: 200_000_000)  // 0.2 seconds
 
 			// Delete file b and create file d
 			try FileManager.default.removeItem(at: fileB)
 			try "File D".write(to: fileD, atomically: true, encoding: .utf8)
-		}
+		}.value
 
-		// Clean up when events are received
-		Task {
-			_ = await monitorTask.result
-			timeoutTask.cancel()
-		}
+		// Wait for the monitoring task to complete
+		await monitorTask.value
 	}
-
-	#expect(eventsReceived, "Should receive expected file system events within timeout")
 }
