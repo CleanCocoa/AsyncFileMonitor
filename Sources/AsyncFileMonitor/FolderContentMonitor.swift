@@ -15,162 +15,110 @@ import Foundation
 /// If it's a folder, it will fire when you add/remove/rename files or folders
 /// below the reference paths. See `Change` for an incomprehensive list of
 /// events details that will be reported.
-public final class FolderContentMonitor: @unchecked Sendable {
+public final class FolderContentMonitor {
 
-	public let pathsToWatch: [String]
-	public let latency: CFTimeInterval
-	public private(set) var lastEventId: FSEventStreamEventId
-
-	private var streamRef: FSEventStreamRef?
-	private var continuations: Set<ContinuationWrapper> = []
-	private let continuationsLock = NSLock()
-
-	private final class ContinuationWrapper: @unchecked Sendable, Hashable {
-		let id = UUID()
-		let continuation: AsyncStream<FolderContentChangeEvent>.Continuation
-
-		init(_ continuation: AsyncStream<FolderContentChangeEvent>.Continuation) {
-			self.continuation = continuation
-		}
-
-		func hash(into hasher: inout Hasher) {
-			hasher.combine(id)
-		}
-
-		static func == (lhs: ContinuationWrapper, rhs: ContinuationWrapper) -> Bool {
-			lhs.id == rhs.id
-		}
-	}
-
-	/// - parameter url: Folder to monitor.
-	/// - parameter sinceWhen: Reference event for the subscription. Default
-	///   is `kFSEventStreamEventIdSinceNow`.
-	/// - parameter latency: Interval (in seconds) to allow coalescing events.
-	public convenience init(
+	/// Create an AsyncStream to monitor file system events.
+	///
+	/// Each call creates a new independent FSEventStream that monitors the specified paths.
+	/// The stream automatically stops when cancelled or deallocated.
+	///
+	/// - Parameters:
+	///   - url: The file or directory URL to monitor
+	///   - sinceWhen: Reference event for the subscription. Default is `kFSEventStreamEventIdSinceNow`
+	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` values.
+	public static func monitor(
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
-	) {
-		self.init(
-			pathsToWatch: [url.path],
+	) -> AsyncStream<FolderContentChangeEvent> {
+		monitor(
+			paths: [url.path],
 			sinceWhen: sinceWhen,
 			latency: latency
 		)
 	}
 
-	/// - parameter pathsToWatch: Collection of file or folder paths.
-	/// - parameter sinceWhen: Reference event for the subscription. Default
-	///   is `kFSEventStreamEventIdSinceNow`.
-	/// - parameter latency: Interval (in seconds) to allow coalescing events.
-	public init(
-		pathsToWatch: [String],
+	/// Create an AsyncStream to monitor file system events.
+	///
+	/// Each call creates a new independent FSEventStream that monitors the specified paths.
+	/// The stream automatically stops when cancelled or deallocated.
+	///
+	/// - Parameters:
+	///   - paths: Array of file or directory paths to monitor
+	///   - sinceWhen: Reference event for the subscription. Default is `kFSEventStreamEventIdSinceNow`
+	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` values.
+	public static func monitor(
+		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
+	) -> AsyncStream<FolderContentChangeEvent> {
+		AsyncStream { continuation in
+			let streamHandler = StreamHandler(
+				paths: paths,
+				sinceWhen: sinceWhen,
+				latency: latency,
+				continuation: continuation
+			)
+
+			continuation.onTermination = { _ in
+				streamHandler.stop()
+			}
+
+			streamHandler.start()
+		}
+	}
+}
+
+// Private class that manages a single FSEventStream and its continuation, RAII style.
+private final class StreamHandler: @unchecked Sendable {
+	let paths: [String]
+	let sinceWhen: FSEventStreamEventId
+	let latency: CFTimeInterval
+	let continuation: AsyncStream<FolderContentChangeEvent>.Continuation
+	var streamRef: FSEventStreamRef?
+
+	init(
+		paths: [String],
+		sinceWhen: FSEventStreamEventId,
+		latency: CFTimeInterval,
+		continuation: AsyncStream<FolderContentChangeEvent>.Continuation
 	) {
-		self.lastEventId = sinceWhen
-		self.pathsToWatch = pathsToWatch
+		self.paths = paths
+		self.sinceWhen = sinceWhen
 		self.latency = latency
+		self.continuation = continuation
 	}
 
 	deinit {
 		stop()
 	}
 
-	/// Create an AsyncStream to monitor file system events.
-	///
-	/// This method starts monitoring and returns an AsyncStream that yields
-	/// file system events. Multiple streams can be created from the same monitor,
-	/// and they will all receive the same events. The monitoring automatically
-	/// stops when all streams are cancelled or deallocated.
-	///
-	/// - Returns: An AsyncStream of FolderContentChangeEvent objects
-	public func makeAsyncStream() -> AsyncStream<FolderContentChangeEvent> {
-		AsyncStream { continuation in
-			let wrapper = ContinuationWrapper(continuation)
-
-			self.continuationsLock.lock()
-			self.continuations.insert(wrapper)
-			self.continuationsLock.unlock()
-
-			// Ensure monitoring is started (safe to call multiple times)
-			self.start()
-
-			// Handle cancellation
-			continuation.onTermination = { @Sendable [weak self] _ in
-				self?.removeContinuation(wrapper)
-			}
-		}
-	}
-
-	private func removeContinuation(_ wrapper: ContinuationWrapper) {
-		continuationsLock.lock()
-		continuations.remove(wrapper)
-		let shouldStop = continuations.isEmpty
-		continuationsLock.unlock()
-
-		// Stop monitoring if no more streams are active
-		if shouldStop {
-			stop()
-		}
-	}
-
-	/// Start file system monitoring. Safe to call multiple times - will only start once.
-	private func start() {
+	func start() {
 		guard streamRef == nil else { return }
 
 		var context = FSEventStreamContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
 		context.info = Unmanaged.passUnretained(self).toOpaque()
+
 		let flags = UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
 		streamRef = FSEventStreamCreate(
 			kCFAllocatorDefault,
-			eventCallback,
+			fsEventCallback,
 			&context,
-			pathsToWatch as CFArray,
-			lastEventId,
+			paths as CFArray,
+			sinceWhen,
 			latency,
 			flags
 		)
 
-		guard let streamRef = streamRef else { return }
+		guard let streamRef else { return }
 
 		FSEventStreamSetDispatchQueue(streamRef, DispatchQueue.main)
 		FSEventStreamStart(streamRef)
 	}
 
-	private let eventCallback: FSEventStreamCallback = {
-		(
-			stream: ConstFSEventStreamRef,
-			contextInfo: UnsafeMutableRawPointer?,
-			numEvents: Int,
-			eventPaths: UnsafeMutableRawPointer,
-			eventFlags: UnsafePointer<FSEventStreamEventFlags>,
-			eventIds: UnsafePointer<FSEventStreamEventId>
-		) in
-
-		let fileSystemWatcher: FolderContentMonitor = unsafeBitCast(contextInfo, to: FolderContentMonitor.self)
-
-		guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String]
-		else { return }
-
-		// Get all active continuations
-		fileSystemWatcher.continuationsLock.lock()
-		let activeContinuations = Array(fileSystemWatcher.continuations)
-		fileSystemWatcher.continuationsLock.unlock()
-
-		// Distribute events to all active streams
-		for index in 0..<numEvents {
-			let change = Change(eventFlags: eventFlags[index])
-			let event = FolderContentChangeEvent(eventId: eventIds[index], eventPath: paths[index], change: change)
-
-			for wrapper in activeContinuations {
-				wrapper.continuation.yield(event)
-			}
-		}
-
-		fileSystemWatcher.lastEventId = eventIds[numEvents - 1]
-	}
-
-	private func stop() {
+	func stop() {
 		guard let streamRef = streamRef else { return }
 
 		FSEventStreamStop(streamRef)
@@ -178,14 +126,37 @@ public final class FolderContentMonitor: @unchecked Sendable {
 		FSEventStreamRelease(streamRef)
 		self.streamRef = nil
 
-		// Finish all active continuations
-		continuationsLock.lock()
-		let activeContinuations = Array(continuations)
-		continuations.removeAll()
-		continuationsLock.unlock()
+		continuation.finish()
+	}
 
-		for wrapper in activeContinuations {
-			wrapper.continuation.finish()
+	func handleEvents(_ events: [FolderContentChangeEvent]) {
+		for event in events {
+			continuation.yield(event)
 		}
 	}
+}
+
+// Static callback function for FSEvents
+private let fsEventCallback: FSEventStreamCallback = { (
+	stream: ConstFSEventStreamRef,
+	contextInfo: UnsafeMutableRawPointer?,
+	numEvents: Int,
+	eventPaths: UnsafeMutableRawPointer,
+	eventFlags: UnsafePointer<FSEventStreamEventFlags>,
+	eventIDs: UnsafePointer<FSEventStreamEventId>
+) in
+    guard let contextInfo else { preconditionFailure("Opaque pointer missing StreamHandler") }
+	let handler = Unmanaged<StreamHandler>.fromOpaque(contextInfo).takeUnretainedValue()
+
+	guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
+
+	// Collect events: each FSEvent may be comprised of multiple events we recognize
+	var events: [FolderContentChangeEvent] = []
+	for index in 0..<numEvents {
+		let change = Change(eventFlags: eventFlags[index])
+		let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
+		events.append(event)
+	}
+
+	handler.handleEvents(events)
 }

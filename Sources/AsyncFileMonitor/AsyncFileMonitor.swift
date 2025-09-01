@@ -23,8 +23,7 @@ public enum AsyncFileMonitor {
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
 	) -> AsyncStream<FolderContentChangeEvent> {
-		let monitor = FolderContentMonitor(url: url, sinceWhen: sinceWhen, latency: latency)
-		return monitor.makeAsyncStream()
+		FolderContentMonitor.monitor(url: url, sinceWhen: sinceWhen, latency: latency)
 	}
 
 	/// Monitor multiple paths and return an AsyncStream of file system events.
@@ -39,7 +38,6 @@ public enum AsyncFileMonitor {
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
 	) -> AsyncStream<FolderContentChangeEvent> {
-		let monitor = FolderContentMonitor(pathsToWatch: paths, sinceWhen: sinceWhen, latency: latency)
-		return monitor.makeAsyncStream()
+		FolderContentMonitor.monitor(paths: paths, sinceWhen: sinceWhen, latency: latency)
 	}
 }

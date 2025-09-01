@@ -11,7 +11,7 @@ import Foundation
 
 public struct FolderContentChangeEvent: CustomStringConvertible, Sendable {
 
-	public let eventId: FSEventStreamEventId
+	public let eventID: FSEventStreamEventId
 	public let eventPath: String
 	public let change: Change
 
@@ -19,14 +19,14 @@ public struct FolderContentChangeEvent: CustomStringConvertible, Sendable {
 
 	public var filename: String { url.lastPathComponent }
 
-	public var description: String { "\(eventPath) (\(eventId)) changed: \(change)" }
+	public var description: String { "\(eventPath) (\(eventID)) changed: \(change)" }
 
 	public init(
-		eventId: FSEventStreamEventId,
+		eventID: FSEventStreamEventId,
 		eventPath: String,
 		change: Change
 	) {
-		self.eventId = eventId
+		self.eventID = eventID
 		self.eventPath = eventPath
 		self.change = change
 	}

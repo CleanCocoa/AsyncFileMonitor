@@ -34,19 +34,16 @@ for await event in eventStream {
 }
 ```
 
-### Two-Step API (Create Monitor, Then Stream)
+### Alternative API (Direct from FolderContentMonitor)
 
 ```swift
 import AsyncFileMonitor
 
-// Create a monitor with specific settings
-let monitor = FolderContentMonitor(
+// Create a stream directly from FolderContentMonitor
+let eventStream = FolderContentMonitor.monitor(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Coalesce rapid changes
 )
-
-// Create an AsyncStream from the monitor
-let eventStream = monitor.makeAsyncStream()
 
 // Process file events
 for await event in eventStream {
@@ -102,15 +99,13 @@ where event.change.contains(.isFile) && event.change.contains(.modified) {
 
 ### Multiple Concurrent Streams
 
-A single monitor can serve multiple AsyncStreams simultaneously. All streams will receive the same events:
+Each call to `monitor()` creates an independent stream with its own FSEventStream:
 
 ```swift
-let monitor = FolderContentMonitor(url: documentsURL)
-
-// Create multiple streams from the same monitor
-let uiUpdateStream = monitor.makeAsyncStream()
-let backupStream = monitor.makeAsyncStream()
-let logStream = monitor.makeAsyncStream()
+// Create multiple independent streams monitoring the same directory
+let uiUpdateStream = AsyncFileMonitor.monitor(url: documentsURL)
+let backupStream = AsyncFileMonitor.monitor(url: documentsURL)
+let logStream = AsyncFileMonitor.monitor(url: documentsURL)
 
 // Process events differently in each stream
 Task {
@@ -161,10 +156,10 @@ Control event coalescing with the `latency` parameter:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let monitor = FolderContentMonitor(url: url, latency: 0.0)
+let eventStream = AsyncFileMonitor.monitor(url: url, latency: 0.0)
 
 // 1-second latency - coalesces rapid changes
-let monitor = FolderContentMonitor(url: url, latency: 1.0)
+let eventStream = AsyncFileMonitor.monitor(url: url, latency: 1.0)
 ```
 
 A latency of 0.0 can produce too much noise when applications make multiple rapid changes to files. Experiment with slightly higher values (e.g., 0.1-1.0 seconds) to reduce noise.
@@ -242,12 +237,11 @@ for await event in eventStream {
 }
 ```
 
-**Option 2: Two-step approach**
+**Option 2: Direct from FolderContentMonitor**
 ```swift
 import AsyncFileMonitor
 
-let monitor = FolderContentMonitor(url: folderUrl)
-let eventStream = monitor.makeAsyncStream()
+let eventStream = FolderContentMonitor.monitor(url: folderUrl)
 
 for await event in eventStream {
     print("File changed: \(event.filename)")

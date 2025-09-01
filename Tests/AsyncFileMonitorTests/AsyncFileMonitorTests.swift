@@ -34,8 +34,7 @@ final class AsyncFileMonitorTests: XCTestCase {
 		try "File C".write(to: fileC, atomically: true, encoding: .utf8)
 		
 		// Set up monitor with a small latency to coalesce rapid changes
-		let monitor = FolderContentMonitor(url: tempDir, latency: 0.1)
-		let eventStream = monitor.makeAsyncStream()
+		let eventStream = FolderContentMonitor.monitor(url: tempDir, latency: 0.1)
 		
 		// Collect events in the background
 		var receivedEvents: [FolderContentChangeEvent] = []
