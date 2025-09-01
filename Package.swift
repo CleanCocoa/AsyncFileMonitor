@@ -15,6 +15,10 @@ let package = Package(
             name: "AsyncFileMonitor",
             dependencies: [],
             exclude: []
+        ),
+        .testTarget(
+            name: "AsyncFileMonitorTests",
+            dependencies: ["AsyncFileMonitor"]
         )
     ]
 )
