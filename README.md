@@ -10,7 +10,6 @@ AsyncFileMonitor is the modernized successor to RxFileMonitor, providing the sam
 
 ## Features
 
-- **Zero Dependencies**: Pure Swift package with no external frameworks required
 - **Modern Async/await**: Uses `AsyncStream` for natural async/await integration
 - **Swift 6 Ready**: Full concurrency support with `Sendable` conformance
 - **FSEvents Integration**: Efficient file system monitoring using Apple's native FSEvents API
@@ -247,6 +246,28 @@ for await event in eventStream {
     print("File changed: \(event.filename)")
 }
 ```
+
+## Architecture
+
+AsyncFileMonitor uses a layered architecture for efficient resource sharing and clean separation of concerns:
+
+```
+FolderContentMonitor (public API)
+    ↓
+ManagerRegistry (actor - thread-safe manager coordination)  
+    ↓
+StreamManager (actor - FSEventStream management)
+    ↓
+OrderedDictionary<Int, Continuation> (simple continuation storage)
+```
+
+### Key Design Benefits
+
+- **Resource Sharing**: Multiple `AsyncStream` instances monitoring the same path share a single `FSEventStream`
+- **Automatic Lifecycle**: FSEventStreams start when the first client connects, stop when the last disconnects
+- **Thread Safety**: All coordination happens through isolated actors with custom executors
+- **Configurable Performance**: Each monitor uses a configurable `DispatchSerialQueue` with specified QoS priority
+- **Clean API**: Simple `monitor()` calls return independent `AsyncStream` instances
 
 ## Building and Testing
 

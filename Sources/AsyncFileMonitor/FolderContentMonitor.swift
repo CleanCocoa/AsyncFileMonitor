@@ -7,6 +7,7 @@
 //  Copyright © 2025 Christian Tietze (AsyncFileMonitor modernization)
 //
 
+import Collections
 import Foundation
 
 /// Monitor for a particular file or folder. Change events
@@ -15,7 +16,31 @@ import Foundation
 /// If it's a folder, it will fire when you add/remove/rename files or folders
 /// below the reference paths. See `Change` for an incomprehensive list of
 /// events details that will be reported.
-public final class FolderContentMonitor {
+
+// Manages the shared StreamManager instances
+private actor ManagerRegistry {
+	static let shared = ManagerRegistry()
+	private var managers: [String: StreamManager] = [:]
+
+	func manager(for paths: [String], sinceWhen: FSEventStreamEventId, latency: CFTimeInterval, qos: DispatchQoS)
+		-> StreamManager
+	{
+		let key = paths.sorted().joined(separator: "|")
+		if let existing = managers[key] {
+			return existing
+		}
+		let manager = StreamManager(paths: paths, sinceWhen: sinceWhen, latency: latency, qos: qos)
+		managers[key] = manager
+		return manager
+	}
+
+	func removeManager(for paths: [String]) {
+		let key = paths.sorted().joined(separator: "|")
+		managers.removeValue(forKey: key)
+	}
+}
+
+public enum FolderContentMonitor {
 
 	/// Create an AsyncStream to monitor file system events.
 	///
@@ -60,59 +85,78 @@ public final class FolderContentMonitor {
 		qos: DispatchQoS = .userInteractive
 	) -> AsyncStream<FolderContentChangeEvent> {
 		AsyncStream { continuation in
-			let streamHandler = StreamHandler(
-				paths: paths,
-				sinceWhen: sinceWhen,
-				latency: latency,
-				continuation: continuation,
-				qos: qos
-			)
-
-			continuation.onTermination = { _ in
-				Task { await streamHandler.stop() }
-			}
-
 			Task {
-				await streamHandler.start()
+				let manager = await ManagerRegistry.shared.manager(
+					for: paths,
+					sinceWhen: sinceWhen,
+					latency: latency,
+					qos: qos
+				)
+				await manager.addContinuation(continuation)
 			}
+		}
+	}
+
+	// Internal method for StreamManager to remove itself when no longer needed
+	static func removeManager(for paths: [String]) {
+		Task {
+			await ManagerRegistry.shared.removeManager(for: paths)
 		}
 	}
 }
 
-// Private actor that manages a single FSEventStream and its continuation.
-//
-// Uses a custom `SerialExecutor` with configurable queue priority. The default queue priority of
-// `.userInteractive` is picked for UI responsiveness.
-private actor StreamHandler {
+// StreamManager coordinates multiple streams for the same paths
+private actor StreamManager {
+
 	let paths: [String]
 	let sinceWhen: FSEventStreamEventId
 	let latency: CFTimeInterval
-	let continuation: AsyncStream<FolderContentChangeEvent>.Continuation
 	var streamRef: FSEventStreamRef?
+
+	// Track multiple continuations with OrderedDictionary for simpler management
+	private var continuations: OrderedDictionary<Int, AsyncStream<FolderContentChangeEvent>.Continuation> = [:]
+	private var nextID: Int = 0
 
 	// Custom queue for FSEventStream operations to work with actor isolation
 	private let queue: DispatchSerialQueue
 	nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
 
-	init(
-		paths: [String],
-		sinceWhen: FSEventStreamEventId,
-		latency: CFTimeInterval,
-		continuation: AsyncStream<FolderContentChangeEvent>.Continuation,
-		qos: DispatchQoS = .userInteractive
-	) {
+	init(paths: [String], sinceWhen: FSEventStreamEventId, latency: CFTimeInterval, qos: DispatchQoS) {
 		self.paths = paths
 		self.sinceWhen = sinceWhen
 		self.latency = latency
-		self.continuation = continuation
-		self.queue = DispatchSerialQueue(label: "AsyncFileMonitor.StreamHandler", qos: qos)
+		self.queue = DispatchSerialQueue(label: "AsyncFileMonitor.StreamManager", qos: qos)
 	}
 
-	deinit {
-		continuation.finish()
+	func addContinuation(_ continuation: AsyncStream<FolderContentChangeEvent>.Continuation) {
+		let id = nextID
+		nextID += 1
+		continuations[id] = continuation
+
+		continuation.onTermination = { _ in
+			Task { [weak self] in
+				await self?.removeContinuation(id: id)
+			}
+		}
+
+		// Start monitoring if this is the first stream
+		if continuations.count == 1 {
+			start()
+		}
 	}
 
-	func start() {
+	private func removeContinuation(id: Int) {
+		continuations.removeValue(forKey: id)
+
+		// Stop monitoring if no more streams
+		if continuations.isEmpty {
+			stop()
+			// Remove from shared managers
+			FolderContentMonitor.removeManager(for: paths)
+		}
+	}
+
+	private func start() {
 		guard streamRef == nil else { return }
 
 		// Define the callback inline to avoid global state
@@ -126,8 +170,8 @@ private actor StreamHandler {
 				eventIDs: UnsafePointer<FSEventStreamEventId>
 			) in
 
-			guard let contextInfo else { preconditionFailure("Opaque pointer missing StreamHandler") }
-			let handler = Unmanaged<StreamHandler>.fromOpaque(contextInfo).takeUnretainedValue()
+			guard let contextInfo else { preconditionFailure("Opaque pointer missing StreamManager") }
+			let manager = Unmanaged<StreamManager>.fromOpaque(contextInfo).takeUnretainedValue()
 
 			guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
 
@@ -141,7 +185,7 @@ private actor StreamHandler {
 
 			// We configure FSEventStreamSetDispatchQueue to use the same queue as the actor itself
 			// uses for its SerialExecutor.
-			handler.assumeIsolated { $0.handleEvents(events) }
+			manager.assumeIsolated { $0.handleEvents(events) }
 		}
 
 		var context = FSEventStreamContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
@@ -164,16 +208,26 @@ private actor StreamHandler {
 		FSEventStreamStart(streamRef)
 	}
 
-	func stop() {
-		guard let streamRef else { return }
+	private func stop() {
+		guard let streamRef = streamRef else { return }
 		FSEventStreamStop(streamRef)
 		FSEventStreamInvalidate(streamRef)
 		FSEventStreamRelease(streamRef)
+		self.streamRef = nil
+
+		// Finish all remaining continuations
+		for (_, continuation) in continuations {
+			continuation.finish()
+		}
+		continuations.removeAll()
 	}
 
-	func handleEvents(_ events: [FolderContentChangeEvent]) {
-		for event in events {
-			continuation.yield(event)
+	private func handleEvents(_ events: [FolderContentChangeEvent]) {
+		// Broadcast events to all active continuations
+		for (_, continuation) in continuations {
+			for event in events {
+				continuation.yield(event)
+			}
 		}
 	}
 }

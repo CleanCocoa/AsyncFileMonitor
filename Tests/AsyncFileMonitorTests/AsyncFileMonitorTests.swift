@@ -74,3 +74,85 @@ func fileMonitoringIntegration() async throws {
 		await monitorTask.value
 	}
 }
+
+@Test("Multiple streams from single monitor")
+func multipleStreamsFromSingleMonitor() async throws {
+	// Create a temporary directory
+	let tempDir = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+	try FileManager.default.createDirectory(at: tempDir, withIntermediateDirectories: true)
+
+	// Ensure cleanup happens even if test fails
+	defer {
+		try? FileManager.default.removeItem(at: tempDir)
+	}
+
+	// Create initial file
+	let testFile = tempDir.appendingPathComponent("test.txt")
+	try "Initial".write(to: testFile, atomically: true, encoding: .utf8)
+
+	// Create multiple streams for the same directory
+	let stream1 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+	let stream2 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+	let stream3 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+
+	// Monitor events and confirm each stream receives them
+	try await confirmation("All streams receive file system events", expectedCount: 6) { confirm in
+		var stream1Count = 0
+		var stream2Count = 0
+		var stream3Count = 0
+
+		let task1 = Task {
+			for await event in stream1 {
+				if event.matches(filename: "test.txt", change: .modified)
+					|| event.matches(filename: "new.txt", change: .created)
+					|| event.matches(filename: "new.txt", change: .renamed)
+				{
+					confirm(count: 1)
+					stream1Count += 1
+					if stream1Count >= 2 { break }
+				}
+			}
+		}
+
+		let task2 = Task {
+			for await event in stream2 {
+				if event.matches(filename: "test.txt", change: .modified)
+					|| event.matches(filename: "new.txt", change: .created)
+					|| event.matches(filename: "new.txt", change: .renamed)
+				{
+					confirm(count: 1)
+					stream2Count += 1
+					if stream2Count >= 2 { break }
+				}
+			}
+		}
+
+		let task3 = Task {
+			for await event in stream3 {
+				if event.matches(filename: "test.txt", change: .modified)
+					|| event.matches(filename: "new.txt", change: .created)
+					|| event.matches(filename: "new.txt", change: .renamed)
+				{
+					confirm(count: 1)
+					stream3Count += 1
+					if stream3Count >= 2 { break }
+				}
+			}
+		}
+
+		// Give streams time to start, then make file changes
+		try await Task {
+			try await Task.sleep(nanoseconds: 200_000_000)  // 0.2 seconds
+
+			// Modify existing file and create new file
+			try "Modified".write(to: testFile, atomically: true, encoding: .utf8)
+			let newFile = tempDir.appendingPathComponent("new.txt")
+			try "New file".write(to: newFile, atomically: true, encoding: .utf8)
+		}.value
+
+		// Wait for all tasks to complete
+		await task1.value
+		await task2.value
+		await task3.value
+	}
+}
