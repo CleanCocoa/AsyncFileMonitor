@@ -65,3 +65,8 @@ fastlane/Preview.html
 fastlane/screenshots
 fastlane/test_output
 
+# Claude Code
+#
+# Local Claude Code settings that should not be committed
+.claude/settings.local.json
+
