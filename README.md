@@ -18,13 +18,13 @@ AsyncFileMonitor is the modernized successor to RxFileMonitor, providing the sam
 
 ## Usage
 
-### Direct AsyncStream API
+### Basic Usage
 
 ```swift
 import AsyncFileMonitor
 
-// Monitor a directory using the convenience API
-let eventStream = AsyncFileMonitor.monitor(url: URL(fileURLWithPath: "/path/to/monitor/"))
+// Monitor a directory
+let eventStream = FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/path/to/monitor/"))
 
 // Use async/await to process events
 for await event in eventStream {
@@ -33,12 +33,12 @@ for await event in eventStream {
 }
 ```
 
-### Alternative API (Direct from FolderContentMonitor)
+### Advanced Configuration
 
 ```swift
 import AsyncFileMonitor
 
-// Create a stream directly from FolderContentMonitor
+// Create a stream with custom configuration
 let eventStream = FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Coalesce rapid changes
@@ -59,7 +59,7 @@ for await event in eventStream {
 ### Monitoring Multiple Paths
 
 ```swift
-let eventStream = AsyncFileMonitor.monitor(paths: [
+let eventStream = FolderContentMonitor.makeStream(paths: [
     "/Users/you/Documents", 
     "/Users/you/Desktop"
 ])
@@ -72,7 +72,7 @@ for await event in eventStream {
 ### Task-based Processing
 
 ```swift
-let eventStream = AsyncFileMonitor.monitor(url: folderURL)
+let eventStream = FolderContentMonitor.makeStream(url: folderURL)
 
 let monitorTask = Task {
     for await event in eventStream {
@@ -88,7 +88,7 @@ monitorTask.cancel()
 ### Filtering Events
 
 ```swift
-let eventStream = AsyncFileMonitor.monitor(url: documentsURL)
+let eventStream = FolderContentMonitor.makeStream(url: documentsURL)
 
 for await event in eventStream
 where event.change.contains(.isFile) && event.change.contains(.modified) {
@@ -98,13 +98,13 @@ where event.change.contains(.isFile) && event.change.contains(.modified) {
 
 ### Multiple Concurrent Streams
 
-Each call to `monitor()` creates an independent stream with its own FSEventStream:
+Each call to `makeStream()` creates an independent stream with its own FSEventStream:
 
 ```swift
 // Create multiple independent streams monitoring the same directory
-let uiUpdateStream = AsyncFileMonitor.monitor(url: documentsURL)
-let backupStream = AsyncFileMonitor.monitor(url: documentsURL)
-let logStream = AsyncFileMonitor.monitor(url: documentsURL)
+let uiUpdateStream = FolderContentMonitor.makeStream(url: documentsURL)
+let backupStream = FolderContentMonitor.makeStream(url: documentsURL)
+let logStream = FolderContentMonitor.makeStream(url: documentsURL)
 
 // Process events differently in each stream
 Task {
@@ -155,10 +155,10 @@ Control event coalescing with the `latency` parameter:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let eventStream = AsyncFileMonitor.monitor(url: url, latency: 0.0)
+let eventStream = FolderContentMonitor.makeStream(url: url, latency: 0.0)
 
 // 1-second latency - coalesces rapid changes
-let eventStream = AsyncFileMonitor.monitor(url: url, latency: 1.0)
+let eventStream = FolderContentMonitor.makeStream(url: url, latency: 1.0)
 ```
 
 A latency of 0.0 can produce too much noise when applications make multiple rapid changes to files. Experiment with slightly higher values (e.g., 0.1-1.0 seconds) to reduce noise.
@@ -224,19 +224,6 @@ monitor.rx.folderContentChange
 ```
 
 ### After (AsyncFileMonitor)
-
-**Option 1: Direct convenience API**
-```swift
-import AsyncFileMonitor
-
-let eventStream = AsyncFileMonitor.monitor(url: folderUrl)
-
-for await event in eventStream {
-    print("File changed: \(event.filename)")
-}
-```
-
-**Option 2: Direct from FolderContentMonitor**
 ```swift
 import AsyncFileMonitor
 
@@ -249,25 +236,23 @@ for await event in eventStream {
 
 ## Architecture
 
-AsyncFileMonitor uses a layered architecture for efficient resource sharing and clean separation of concerns:
+AsyncFileMonitor uses a simple, efficient architecture:
 
 ```
-FolderContentMonitor (public API)
+FolderContentMonitor (actor - public API & FSEventStream management)
     ↓
-ManagerRegistry (actor - thread-safe manager coordination)  
+StreamRegistrar (actor - continuation management & lifecycle)
     ↓
-StreamManager (actor - FSEventStream management)
-    ↓
-OrderedDictionary<Int, Continuation> (simple continuation storage)
+OrderedDictionary<Int, Continuation> (continuation storage)
 ```
 
 ### Key Design Benefits
 
-- **Resource Sharing**: Multiple `AsyncStream` instances monitoring the same path share a single `FSEventStream`
+- **Resource Sharing**: Multiple `AsyncStream` instances can share a single FSEventStream
 - **Automatic Lifecycle**: FSEventStreams start when the first client connects, stop when the last disconnects
 - **Thread Safety**: All coordination happens through isolated actors with custom executors
 - **Configurable Performance**: Each monitor uses a configurable `DispatchSerialQueue` with specified QoS priority
-- **Clean API**: Simple `monitor()` calls return independent `AsyncStream` instances
+- **Clean API**: Simple `makeStream()` calls return independent `AsyncStream` instances
 
 ## Command Line Tool
 
@@ -315,6 +300,15 @@ make build
 
 # Build and run CLI tool
 swift run watch /path/to/monitor
+
+# Generate documentation
+make docs
+
+# Preview documentation in browser
+make docs-preview
+
+# Generate static documentation website
+make docs-static
 
 # Run tests  
 make test

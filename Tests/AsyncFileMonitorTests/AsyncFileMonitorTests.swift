@@ -91,9 +91,9 @@ func multipleStreamsFromSingleMonitor() async throws {
 	try "Initial".write(to: testFile, atomically: true, encoding: .utf8)
 
 	// Create multiple streams for the same directory
-	let stream1 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
-	let stream2 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
-	let stream3 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+	let stream1 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+	let stream2 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+	let stream3 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
 
 	// Monitor events and confirm each stream receives them
 	try await confirmation("All streams receive file system events", expectedCount: 6) { confirm in

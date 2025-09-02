@@ -31,11 +31,10 @@ struct Watch {
 		}
 		print("📡 Press Ctrl+C to stop monitoring\n")
 
-		// Enable logging so we can see the activity
-		await AsyncFileMonitorLogger.shared.setEnabled(true)
+		// Note: AsyncFileMonitorLogger removed for simplicity
 
 		// Create the monitor stream
-		let stream = AsyncFileMonitor.monitor(paths: paths)
+		let stream = FolderContentMonitor.makeStream(paths: paths)
 
 		// Monitor for changes
 		for await event in stream {

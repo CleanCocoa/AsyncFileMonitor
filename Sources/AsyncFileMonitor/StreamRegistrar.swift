@@ -13,7 +13,7 @@ import Foundation
 
 /// Stream lifecycle events for automatic start/stop management.
 ///
-/// These events are emitted by ``StreamRegistrar`` to signal when the first stream is added
+/// These events are emitted by the stream registrar to signal when the first stream is added
 /// or the last stream is removed, enabling automatic resource management.
 public enum StreamLifecycleEvent: Sendable {
 	/// Emitted when the first stream is added to an empty registrar.
