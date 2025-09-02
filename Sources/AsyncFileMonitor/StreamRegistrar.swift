@@ -8,7 +8,7 @@
 //  Helper class to manage multiple AsyncStream continuations for event broadcasting.
 //
 
-import Collections
+import OrderedCollections
 import Foundation
 
 /// Stream lifecycle events for automatic start/stop management.

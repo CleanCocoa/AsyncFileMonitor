@@ -17,7 +17,7 @@ let package = Package(
 		.target(
 			name: "AsyncFileMonitor",
 			dependencies: [
-				.product(name: "Collections", package: "swift-collections")
+				.product(name: "OrderedCollections", package: "swift-collections")
 			],
 			exclude: []
 		),
