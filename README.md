@@ -39,7 +39,7 @@ for await event in eventStream {
 import AsyncFileMonitor
 
 // Create a stream directly from FolderContentMonitor
-let eventStream = FolderContentMonitor.monitor(
+let eventStream = FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Coalesce rapid changes
 )
@@ -240,7 +240,7 @@ for await event in eventStream {
 ```swift
 import AsyncFileMonitor
 
-let eventStream = FolderContentMonitor.monitor(url: folderUrl)
+let eventStream = FolderContentMonitor.makeStream(url: folderUrl)
 
 for await event in eventStream {
     print("File changed: \(event.filename)")

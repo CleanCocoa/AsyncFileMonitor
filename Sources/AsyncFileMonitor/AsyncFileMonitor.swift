@@ -25,7 +25,7 @@ public enum AsyncFileMonitor {
 		latency: CFTimeInterval = 0,
 		qos: DispatchQoS = .userInteractive
 	) -> AsyncStream<FolderContentChangeEvent> {
-		FolderContentMonitor.monitor(url: url, sinceWhen: sinceWhen, latency: latency, qos: qos)
+		FolderContentMonitor.makeStream(url: url, sinceWhen: sinceWhen, latency: latency, qos: qos)
 	}
 
 	/// Monitor multiple paths and return an AsyncStream of file system events.
@@ -42,6 +42,6 @@ public enum AsyncFileMonitor {
 		latency: CFTimeInterval = 0,
 		qos: DispatchQoS = .userInteractive
 	) -> AsyncStream<FolderContentChangeEvent> {
-		FolderContentMonitor.monitor(paths: paths, sinceWhen: sinceWhen, latency: latency, qos: qos)
+		FolderContentMonitor.makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency, qos: qos)
 	}
 }

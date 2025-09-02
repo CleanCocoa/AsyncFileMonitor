@@ -44,7 +44,7 @@ public enum FolderContentMonitor {
 
 	/// Create an AsyncStream to monitor file system events.
 	///
-	/// Each call creates a new independent FSEventStream that monitors the specified paths.
+	/// Each call creates a new independent AsyncStream that shares an underlying FSEventStream for efficiency.
 	/// The stream automatically stops when cancelled or deallocated.
 	///
 	/// - Parameters:
@@ -53,13 +53,13 @@ public enum FolderContentMonitor {
 	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
 	///   - qos: Quality of service for the monitoring queue. Default is `userInteractive` for UI responsiveness
 	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` values.
-	public static func monitor(
+	public static func makeStream(
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0,
 		qos: DispatchQoS = .userInteractive
 	) -> AsyncStream<FolderContentChangeEvent> {
-		monitor(
+		makeStream(
 			paths: [url.path],
 			sinceWhen: sinceWhen,
 			latency: latency,
@@ -69,7 +69,7 @@ public enum FolderContentMonitor {
 
 	/// Create an AsyncStream to monitor file system events.
 	///
-	/// Each call creates a new independent FSEventStream that monitors the specified paths.
+	/// Each call creates a new independent AsyncStream that shares an underlying FSEventStream for efficiency.
 	/// The stream automatically stops when cancelled or deallocated.
 	///
 	/// - Parameters:
@@ -78,7 +78,7 @@ public enum FolderContentMonitor {
 	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
 	///   - qos: Quality of service for the monitoring queue. Default is `userInteractive` for UI responsiveness
 	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` values.
-	public static func monitor(
+	public static func makeStream(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0,

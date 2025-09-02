@@ -33,7 +33,7 @@ func fileMonitoringIntegration() async throws {
 	try "File C".write(to: fileC, atomically: true, encoding: .utf8)
 
 	// Set up monitor with a small latency to coalesce rapid changes
-	let eventStream = FolderContentMonitor.monitor(url: tempDir, latency: 0.1)
+	let eventStream = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
 
 	// Monitor events and confirm we receive the expected ones
 	try await confirmation("Receive file system events", expectedCount: 2) { confirm in
