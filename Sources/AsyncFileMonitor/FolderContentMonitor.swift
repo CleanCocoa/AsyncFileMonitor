@@ -71,7 +71,9 @@ public final class FolderContentMonitor {
 	}
 }
 
-// Private class that manages a single FSEventStream and its continuation, RAII style.
+// Private class that manages a single FSEventStream and its continuation.
+// Since FSEventStream delivers events on the main queue, we can safely use @unchecked Sendable
+// with the understanding that all operations happen on the main queue.
 private final class StreamHandler: @unchecked Sendable {
 	let paths: [String]
 	let sinceWhen: FSEventStreamEventId
