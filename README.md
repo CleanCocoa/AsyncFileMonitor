@@ -269,11 +269,52 @@ OrderedDictionary<Int, Continuation> (simple continuation storage)
 - **Configurable Performance**: Each monitor uses a configurable `DispatchSerialQueue` with specified QoS priority
 - **Clean API**: Simple `monitor()` calls return independent `AsyncStream` instances
 
+## Command Line Tool
+
+AsyncFileMonitor includes a built-in CLI tool for monitoring file changes:
+
+```bash
+# Monitor a single directory
+swift run watch /Users/username/Documents
+
+# Monitor multiple directories
+swift run watch /path/to/folder1 /path/to/folder2
+
+# Show usage help
+swift run watch
+```
+
+### CLI Features
+- **Real-time Monitoring**: Live display of file system events with timestamps
+- **Detailed Output**: Shows event path, change types, and event IDs
+- **Multi-path Support**: Monitor multiple directories simultaneously
+- **Path Validation**: Validates paths exist before starting monitoring
+- **Debug Logging**: Enables AsyncFileMonitor's internal logging for troubleshooting
+
+### Example Output
+```
+🎯 Starting AsyncFileMonitor CLI
+📁 Monitoring paths:
+   • /Users/username/Documents
+📡 Press Ctrl+C to stop monitoring
+
+[14:23:15.123] 📄 /Users/username/Documents/test.txt
+                🔄 isFile, modified
+                🆔 Event ID: 12345678
+
+[14:23:15.456] 📄 /Users/username/Documents/newfile.txt
+                🔄 isFile, created
+                🆔 Event ID: 12345679
+```
+
 ## Building and Testing
 
 ```bash
 # Build
 make build
+
+# Build and run CLI tool
+swift run watch /path/to/monitor
 
 # Run tests  
 make test

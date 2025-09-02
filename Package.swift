@@ -20,6 +20,11 @@ let package = Package(
 			],
 			exclude: []
 		),
+		.executableTarget(
+			name: "watch",
+			dependencies: ["AsyncFileMonitor"],
+			path: "Sources/watch"
+		),
 		.testTarget(
 			name: "AsyncFileMonitorTests",
 			dependencies: ["AsyncFileMonitor"]

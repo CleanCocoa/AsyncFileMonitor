@@ -10,6 +10,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - `make format` - Format Swift code in Sources/ and Tests/ directories
 - `make clean` - Clean build artifacts
 
+### CLI Tool Commands
+- `swift run watch <path>` - Monitor file system changes in real-time
+- `swift run watch <path1> <path2>` - Monitor multiple paths simultaneously
+- `swift run watch` - Show CLI usage help
+
 ## Project Architecture
 
 AsyncFileMonitor is a modern Swift 6 package that provides async/await file system monitoring using Apple's FSEvents API. The architecture is built around these key components:
@@ -52,5 +57,19 @@ The library handles complex FSEvents patterns including:
 
 - **Minimum Platform**: macOS 14.0+ (Swift 6 concurrency requirement)
 - **Swift Version**: 6.0+
-- **Package Type**: Library with single target
-- **Dependencies**: None (zero external dependencies)
+- **Package Type**: Library with CLI tool
+- **Dependencies**: swift-collections (for internal use)
+- **Targets**:
+  - `AsyncFileMonitor` - Main library target
+  - `watch` - CLI tool executable (internal, not exposed as product)
+  - `AsyncFileMonitorTests` - Test suite
+
+## CLI Tool Implementation
+
+The `watch` CLI tool (`Sources/watch/main.swift`) provides a practical demonstration of AsyncFileMonitor usage:
+- **Real-time Monitoring**: Uses AsyncFileMonitor.monitor() to watch file changes
+- **Logger Integration**: Enables AsyncFileMonitorLogger for debugging FSEvent activity
+- **Multi-path Support**: Can monitor multiple directories simultaneously
+- **User-friendly Output**: Shows timestamps, file paths, change types, and event IDs
+- **Path Validation**: Verifies paths exist before starting monitoring
+- **Graceful Handling**: Provides clear usage messages and error handling
