@@ -8,17 +8,21 @@
 
 import Foundation
 
-/// Convenience functions for creating file monitors and async streams
+/// Convenience functions for creating file monitors and async streams.
+///
+/// ``AsyncFileMonitor`` provides static methods for easily creating `AsyncStream` instances
+/// that monitor file system changes. These methods create ``FolderContentMonitor`` instances
+/// internally and return streams of ``FolderContentChangeEvent`` objects.
 public enum AsyncFileMonitor {
 
-	/// Monitor a single URL and return an AsyncStream of file system events.
+	/// Monitor a single URL and return an `AsyncStream` of file system events.
 	///
 	/// - Parameters:
 	///   - url: The file or directory URL to monitor
 	///   - sinceWhen: Reference event for the subscription. Default is `kFSEventStreamEventIdSinceNow`
-	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
-	///   - qos: Quality of service for the monitoring queue. Default is `userInteractive` for UI responsiveness
-	/// - Returns: An AsyncStream of FolderContentChangeEvent objects
+	///   - latency: Interval (in seconds) to allow coalescing events. Default is `0`
+	///   - qos: Quality of service for the monitoring queue. Default is `.userInteractive` for UI responsiveness
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` objects
 	public static func monitor(
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
@@ -28,14 +32,14 @@ public enum AsyncFileMonitor {
 		FolderContentMonitor.makeStream(url: url, sinceWhen: sinceWhen, latency: latency, qos: qos)
 	}
 
-	/// Monitor multiple paths and return an AsyncStream of file system events.
+	/// Monitor multiple paths and return an `AsyncStream` of file system events.
 	///
 	/// - Parameters:
 	///   - paths: Array of file or directory paths to monitor
 	///   - sinceWhen: Reference event for the subscription. Default is `kFSEventStreamEventIdSinceNow`
-	///   - latency: Interval (in seconds) to allow coalescing events. Default is 0
-	///   - qos: Quality of service for the monitoring queue. Default is `userInteractive` for UI responsiveness
-	/// - Returns: An AsyncStream of FolderContentChangeEvent objects
+	///   - latency: Interval (in seconds) to allow coalescing events. Default is `0`
+	///   - qos: Quality of service for the monitoring queue. Default is `.userInteractive` for UI responsiveness
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` objects
 	public static func monitor(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),

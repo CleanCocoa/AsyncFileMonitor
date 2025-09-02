@@ -12,20 +12,42 @@ import Foundation
 /// Monitor for a particular file or folder.
 ///
 /// ``Change`` events will fire when the contents of the URL changes. If the monitored path is a
-/// folder, it will fire when you add/remove/rename files or folders below the reference paths.
+/// folder, it will fire when you add/remove/rename files or folders below the reference ``paths``.
 ///
-/// See ``Change`` for an incomprehensive list of events details that will be reported.
+/// See ``Change`` for an incomprehensive list of event details that will be reported.
+///
+/// ## Usage
+///
+/// Create a monitor instance and call ``makeStream()`` to get an `AsyncStream` of
+/// ``FolderContentChangeEvent`` objects:
+///
+/// ```swift
+/// let monitor = FolderContentMonitor(url: myFolderURL)
+/// let stream = await monitor.makeStream()
+///
+/// for await event in stream {
+///     print("Change detected: \(event.eventPath)")
+/// }
+/// ```
 public actor FolderContentMonitor {
 	fileprivate let registrar = StreamRegistrar<FolderContentChangeEvent>()
 	fileprivate var streamRef: FSEventStreamRef?
 
 	/// The paths being monitored.
+	///
+	/// This array contains the file system paths that this monitor is watching for changes.
 	public let paths: [String]
 
 	/// The latency setting for event coalescing.
+	///
+	/// Interval (in seconds) that the system should wait before reporting events,
+	/// allowing multiple related events to be coalesced. A value of `0.0` means no delay.
 	public let latency: CFTimeInterval
 
 	/// The FSEventStreamEventId to start from.
+	///
+	/// This determines which events should be reported. Use `kFSEventStreamEventIdSinceNow`
+	/// to only receive events that occur after monitoring starts.
 	public let sinceWhen: FSEventStreamEventId
 
 	// Custom queue for FSEventStream operations to work with actor isolation
@@ -35,6 +57,12 @@ public actor FolderContentMonitor {
 	private var registrarLifecycle: Task<Void, Never>?
 
 	/// Create a new monitor for the specified paths.
+	///
+	/// - Parameters:
+	///   - paths: Array of file system paths to monitor
+	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
+	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - qos: Quality of service for the monitoring queue (default: `.userInteractive`)
 	public init(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
@@ -49,6 +77,12 @@ public actor FolderContentMonitor {
 	}
 
 	/// Create a new monitor for a single URL.
+	///
+	/// - Parameters:
+	///   - url: The file or directory URL to monitor (must be a file URL)
+	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
+	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - qos: Quality of service for the monitoring queue (default: `.userInteractive`)
 	public init(
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
@@ -77,13 +111,19 @@ public actor FolderContentMonitor {
 
 	/// Create a new `AsyncStream` of change events for this monitor.
 	///
-	/// Multiple streams can be created from the same monitor instance.
+	/// Multiple streams can be created from the same monitor instance. The monitor
+	/// automatically starts when the first stream is created and stops when the last stream ends.
+	///
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` objects
 	public func makeStream() async -> AsyncStream<FolderContentChangeEvent> {
 		await setupLifecycleManagement()
 		return await registrar.makeStream()
 	}
 
 	/// Set up automatic start/stop lifecycle management based on stream count.
+	///
+	/// This method ensures that the FSEventStream is started when the first stream is added
+	/// and stopped when the last stream is removed.
 	private func setupLifecycleManagement() async {
 		guard registrarLifecycle == nil else { return }
 
@@ -139,6 +179,13 @@ public actor FolderContentMonitor {
 	///
 	/// This creates a new ``FolderContentMonitor`` instance and returns its first stream.
 	/// The monitor will be kept alive as long as the stream is active.
+	///
+	/// - Parameters:
+	///   - url: The file or directory URL to monitor
+	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
+	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - qos: Quality of service for the monitoring queue (default: `.userInteractive`)
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` objects
 	nonisolated public static func makeStream(
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
@@ -166,10 +213,17 @@ public actor FolderContentMonitor {
 		}
 	}
 
-	/// Create an AsyncStream to monitor file system events.
+	/// Create an `AsyncStream` to monitor file system events.
 	///
-	/// This creates a new FolderContentMonitor instance and returns its first stream.
+	/// This creates a new ``FolderContentMonitor`` instance and returns its first stream.
 	/// The monitor will be kept alive as long as the stream is active.
+	///
+	/// - Parameters:
+	///   - paths: Array of file or directory paths to monitor
+	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
+	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - qos: Quality of service for the monitoring queue (default: `.userInteractive`)
+	/// - Returns: An `AsyncStream` of ``FolderContentChangeEvent`` objects
 	nonisolated public static func makeStream(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),

@@ -12,21 +12,29 @@ import Collections
 import Foundation
 
 /// Stream lifecycle events for automatic start/stop management.
+///
+/// These events are emitted by ``StreamRegistrar`` to signal when the first stream is added
+/// or the last stream is removed, enabling automatic resource management.
 public enum StreamLifecycleEvent: Sendable {
+	/// Emitted when the first stream is added to an empty registrar.
 	case firstStreamAdded
+
+	/// Emitted when the last stream is removed from the registrar.
 	case lastStreamRemoved
 }
 
 /// Manages multiple `AsyncStream` continuations for broadcasting elements to multiple consumers.
 ///
 /// Uses `OrderedDictionary` to maintain registration order when broadcasting.
-/// Emits lifecycle events when transitioning between 0 and 1+ streams.
+/// Emits ``StreamLifecycleEvent`` events when transitioning between `0` and `1+` streams.
 actor StreamRegistrar<Element> where Element: Sendable {
 	private var count = 0
 	private var continuations = OrderedDictionary<Int, AsyncStream<Element>.Continuation>()
 	private var lifecycleContinuation: AsyncStream<StreamLifecycleEvent>.Continuation?
 
 	/// Number of active streams.
+	///
+	/// This property provides a count of currently registered stream continuations.
 	var streamCount: Int { continuations.count }
 
 	deinit {
@@ -37,13 +45,20 @@ actor StreamRegistrar<Element> where Element: Sendable {
 	}
 
 	/// Create a stream that emits lifecycle events (first stream added, last stream removed).
+	///
+	/// - Returns: An `AsyncStream` of ``StreamLifecycleEvent`` values
 	func makeLifecycleStream() -> AsyncStream<StreamLifecycleEvent> {
 		let (stream, continuation) = AsyncStream<StreamLifecycleEvent>.makeStream()
 		lifecycleContinuation = continuation
 		return stream
 	}
 
-	/// Create a new AsyncStream that will receive all yielded elements.
+	/// Create a new `AsyncStream` that will receive all yielded elements.
+	///
+	/// This method automatically manages the stream's lifecycle, removing it from
+	/// the registrar when the stream terminates.
+	///
+	/// - Returns: An `AsyncStream` that will receive all broadcast elements
 	func makeStream() -> AsyncStream<Element> {
 		count += 1
 		let id = count
@@ -70,6 +85,8 @@ actor StreamRegistrar<Element> where Element: Sendable {
 	}
 
 	/// Broadcast an element to all registered continuations.
+	///
+	/// - Parameter element: The element to broadcast to all active streams
 	func yield(_ element: Element) {
 		for (_, continuation) in continuations {
 			continuation.yield(element)
