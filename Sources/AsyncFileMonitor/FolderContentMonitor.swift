@@ -99,7 +99,7 @@ public actor FolderContentMonitor {
 	}
 
 	deinit {
-		assumeIsolated { actor in
+		assumeIsolated { actor in  // FIXME: we can't assume this
 			if let streamRef = actor.streamRef {
 				FSEventStreamStop(streamRef)
 				FSEventStreamInvalidate(streamRef)
@@ -161,7 +161,7 @@ public actor FolderContentMonitor {
 
 		guard let streamRef else { return }
 
-		FSEventStreamSetDispatchQueue(streamRef, queue)  // Share the serial execution queue used for actor isolation
+		FSEventStreamSetDispatchQueue(streamRef, queue)  // Share the serial execution queue used for actor isolation to not run into issues when events need to be processed by the actor again
 		FSEventStreamStart(streamRef)
 	}
 
@@ -250,6 +250,12 @@ public actor FolderContentMonitor {
 			}
 		}
 	}
+
+	nonisolated fileprivate func broadcast(folderContentChangeEvents events: [FolderContentChangeEvent]) async {
+		for event in events {
+			await registrar.yield(event)
+		}
+	}
 }
 
 private let callback: FSEventStreamCallback = {
@@ -276,12 +282,10 @@ private let callback: FSEventStreamCallback = {
 	}
 
 	// We configure FSEventStreamSetDispatchQueue to use the same queue as the actor itself
-	// uses for its SerialExecutor.
-	_ = monitor.assumeIsolated { actor in
+	// uses for its SerialExecutor, so this assumption won't crash.
+	_ = monitor.assumeIsolated { monitor in
 		Task {
-			for event in events {
-				await actor.registrar.yield(event)
-			}
+			await monitor.broadcast(folderContentChangeEvents: events)
 		}
 	}
 }
