@@ -4,7 +4,7 @@ import PackageDescription
 let package = Package(
 	name: "AsyncFileMonitor",
 	platforms: [
-		.macOS(.v14)
+		.macOS(.v15)
 	],
 	products: [
 		.library(name: "AsyncFileMonitor", targets: ["AsyncFileMonitor"])
@@ -29,6 +29,12 @@ let package = Package(
 		.testTarget(
 			name: "AsyncFileMonitorTests",
 			dependencies: ["AsyncFileMonitor"]
+		),
+		.testTarget(
+			name: "RaceConditionTests",
+			dependencies: ["AsyncFileMonitor"],
+			path: "Tests/RaceConditionTests",
+			exclude: ["README.md"]
 		),
 	]
 )

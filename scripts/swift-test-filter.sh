@@ -25,6 +25,15 @@ EXECUTED_TESTS=0
 
 while IFS= read -r line; do
     # Test run summary - check first to ensure we never filter these out
+    # Success case with known issues - new Swift Testing format: "􀢄  Test run with X tests passed after Y seconds with Z known issue."
+    if [[ "$line" =~ 􀢄.*Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds.*with.*known[[:space:]]+issue ]]; then
+        echo
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════${NC}"
+        echo -e "${GREEN}${BOLD}✓ ALL TESTS PASSED (with expected known issues)${NC}"
+        echo -e "${YELLOW}$line${NC}"
+        echo -e "${GREEN}${BOLD}════════════════════════════════════════${NC}"
+        continue
+    fi
     # Success case - matches the actual format: "􁁛  Test run with X tests passed after Y seconds."
     if [[ "$line" =~ 􁁛.*Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds ]]; then
         echo
@@ -61,6 +70,13 @@ while IFS= read -r line; do
         continue
     fi
     
+    # Test passed with known issues - show these as they're important
+    if [[ "$line" =~ ^[[:space:]]*􀢄[[:space:]]+Test.*passed.*after.*seconds.*with.*known[[:space:]]+issue ]]; then
+        echo -e "${YELLOW}$line${NC}"
+        ((TESTS_RUN++))
+        continue
+    fi
+    
     # Skip successful test lines but count them
     if [[ "$line" =~ ^[[:space:]]*􁁛[[:space:]]+Test.*passed.*after.*seconds\. ]]; then
         ((TESTS_RUN++))
@@ -88,6 +104,25 @@ while IFS= read -r line; do
     
     # Skip successful suite lines
     if [[ "$line" =~ ^[[:space:]]*􁁛[[:space:]]+Suite.*passed.*after.*seconds\. ]]; then
+        continue
+    fi
+    
+    # Handle known issues - show them with different formatting than failures
+    if [[ "$line" =~ ^[[:space:]]*􀢄[[:space:]]+Test[[:space:]]+\"([^\"]+)\".*recorded[[:space:]]+a[[:space:]]+known[[:space:]]+issue[[:space:]]+at[[:space:]]+([^:]+):([0-9]+):([0-9]+): ]]; then
+        TEST_NAME="${BASH_REMATCH[1]}"
+        FILE="${BASH_REMATCH[2]}"
+        LINE="${BASH_REMATCH[3]}"
+        COL="${BASH_REMATCH[4]}"
+        
+        if [[ "$CURRENT_FAILING_TEST" != "$TEST_NAME" ]]; then
+            echo
+            echo -e "${YELLOW}${BOLD}ℹ Known Issue: ${TEST_NAME}${NC}"
+            CURRENT_FAILING_TEST="$TEST_NAME"
+        fi
+        
+        echo -e "  ${CYAN}${FILE}:${LINE}:${COL}${NC}"
+        ((ISSUES_FOUND++))
+        IN_FAILURE_CONTEXT=1
         continue
     fi
     

@@ -31,7 +31,7 @@ import Foundation
 /// ```
 public actor FolderContentMonitor {
 	fileprivate let registrar = StreamRegistrar<FolderContentChangeEvent>()
-	fileprivate var streamRef: FSEventStreamRef?
+	fileprivate var fileSystemEventStream: FileSystemEventStream?
 
 	/// The paths being monitored.
 	///
@@ -50,9 +50,14 @@ public actor FolderContentMonitor {
 	/// to only receive events that occur after monitoring starts.
 	public let sinceWhen: FSEventStreamEventId
 
-	// Custom queue for FSEventStream operations to work with actor isolation
-	fileprivate let queue: DispatchSerialQueue
-	nonisolated public var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+	// Use the shared FileSystemEventExecutor for all file monitoring operations
+	nonisolated public var unownedExecutor: UnownedSerialExecutor {
+		if #available(macOS 15.0, *) {
+			return FileSystemEventExecutor.shared.asUnownedSerialExecutor()
+		} else {
+			fatalError("macOS 15.0 or later is required")
+		}
+	}
 
 	private var registrarLifecycle: Task<Void, Never>?
 
@@ -72,7 +77,6 @@ public actor FolderContentMonitor {
 		self.paths = paths
 		self.latency = latency
 		self.sinceWhen = sinceWhen
-		self.queue = DispatchSerialQueue(label: "AsyncFileMonitor.FolderContentMonitor", qos: qos)
 		self.registrarLifecycle = nil
 	}
 
@@ -99,14 +103,7 @@ public actor FolderContentMonitor {
 	}
 
 	deinit {
-		assumeIsolated { actor in  // FIXME: we can't assume this
-			if let streamRef = actor.streamRef {
-				FSEventStreamStop(streamRef)
-				FSEventStreamInvalidate(streamRef)
-				FSEventStreamRelease(streamRef)
-			}
-			actor.registrarLifecycle?.cancel()
-		}
+		registrarLifecycle?.cancel()
 	}
 
 	/// Create a new `AsyncStream` of change events for this monitor.
@@ -143,34 +140,44 @@ public actor FolderContentMonitor {
 	}
 
 	private func start() {
-		guard streamRef == nil else { return }
+		FileSystemEventExecutor.shared.preconditionIsolated("start() must be called on FileSystemEventExecutor")
 
-		var context = FSEventStreamContext(version: 0, info: nil, retain: nil, release: nil, copyDescription: nil)
-		context.info = Unmanaged.passUnretained(self).toOpaque()
-
-		let flags = UInt32(kFSEventStreamCreateFlagUseCFTypes | kFSEventStreamCreateFlagFileEvents)
-		streamRef = FSEventStreamCreate(
-			kCFAllocatorDefault,
-			callback,
-			&context,
-			paths as CFArray,
-			sinceWhen,
-			latency,
-			flags
+		precondition(
+			fileSystemEventStream == nil,
+			"Should be impossible to run start twice in a row unless we have a race condition"
 		)
 
-		guard let streamRef else { return }
+		do {
+			let stream = try FileSystemEventStream(
+				paths: paths,
+				sinceWhen: sinceWhen,
+				latency: latency,
+				queue: FileSystemEventExecutor.shared.underlyingQueue
+			) { [weak self] events in
+				guard let self else { return }
+				// CRITICAL: Executor preference prevents severe event reordering race conditions. (ref: 20250904T080826)
+				// FSEventStream itself delivers events in perfect chronological order, but the Swift
+				// concurrency pipeline (Task creation → actor calls → AsyncStream) can introduce timing
+				// variations. This executor preference is necessary but not sufficient for perfect ordering.
+				// See: docs/FSEventStream Ordering Findings.md and docs/Event Reordering with Executor.md
+				Task(executorPreference: FileSystemEventExecutor.shared) {
+					await self.broadcast(folderContentChangeEvents: events)
+				}
+			}
 
-		FSEventStreamSetDispatchQueue(streamRef, queue)  // Share the serial execution queue used for actor isolation to not run into issues when events need to be processed by the actor again
-		FSEventStreamStart(streamRef)
+			fileSystemEventStream = stream
+		} catch {
+			// If FSEventStream creation fails, we can't monitor
+			// The fileSystemEventStream remains nil, so no events will be delivered
+			print("Failed to create FileSystemEventStream: \(error)")
+		}
 	}
 
 	private func stop() {
-		guard let streamRef = streamRef else { return }
-		FSEventStreamStop(streamRef)
-		FSEventStreamInvalidate(streamRef)
-		FSEventStreamRelease(streamRef)
-		self.streamRef = nil
+		dispatchPrecondition(condition: .onQueue(FileSystemEventExecutor.shared.underlyingQueue))
+
+		// Simply release the file system event stream - its deinit will handle cleanup
+		fileSystemEventStream = nil
 	}
 
 	// MARK: - Static Convenience Methods
@@ -199,16 +206,13 @@ public actor FolderContentMonitor {
 			qos: qos
 		)
 
-		// Keep monitor alive as long as stream is active
 		return AsyncStream { continuation in
-			Task {
+			Task(executorPreference: FileSystemEventExecutor.shared) {
 				let stream = await monitor.makeStream()
 				for await event in stream {
 					continuation.yield(event)
 				}
 				continuation.finish()
-				// Monitor will be deallocated when stream ends
-				_ = monitor
 			}
 		}
 	}
@@ -256,36 +260,29 @@ public actor FolderContentMonitor {
 			await registrar.yield(event)
 		}
 	}
-}
 
-private let callback: FSEventStreamCallback = {
-	(
-		stream: ConstFSEventStreamRef,
-		contextInfo: UnsafeMutableRawPointer?,
-		numEvents: Int,
-		eventPaths: UnsafeMutableRawPointer,
-		eventFlags: UnsafePointer<FSEventStreamEventFlags>,
-		eventIDs: UnsafePointer<FSEventStreamEventId>
-	) in
-
-	guard let contextInfo else { preconditionFailure("Opaque pointer missing FolderContentMonitor") }
-	let monitor = Unmanaged<FolderContentMonitor>.fromOpaque(contextInfo).takeUnretainedValue()
-
-	guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
-
-	// Collect events: each FSEvent may be comprised of multiple events we recognize
-	var events: [FolderContentChangeEvent] = []
-	for index in 0..<numEvents {
-		let change = Change(eventFlags: eventFlags[index])
-		let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
-		events.append(event)
+	/// Create a task with the file system event executor preference.
+	///
+	/// This ensures that the task and its structured concurrency children
+	/// (async let, TaskGroup) will prefer to run on the shared FileSystemEventExecutor,
+	/// avoiding unnecessary context switches.
+	@available(macOS 15.0, *)
+	public func createTask<Success>(
+		priority: TaskPriority? = nil,
+		operation: @Sendable @escaping () async throws -> Success
+	) -> Task<Success, Error> {
+		Task(executorPreference: FileSystemEventExecutor.shared, priority: priority, operation: operation)
 	}
 
-	// We configure FSEventStreamSetDispatchQueue to use the same queue as the actor itself
-	// uses for its SerialExecutor, so this assumption won't crash.
-	_ = monitor.assumeIsolated { monitor in
-		Task {
-			await monitor.broadcast(folderContentChangeEvents: events)
-		}
+	/// Execute an operation with the file system event executor preference.
+	///
+	/// This ensures that the operation and its structured concurrency children
+	/// will prefer to run on the shared FileSystemEventExecutor, avoiding unnecessary
+	/// context switches.
+	@available(macOS 15.0, *)
+	public func withExecutorPreference<T>(
+		operation: @Sendable () async throws -> T
+	) async rethrows -> T {
+		try await withTaskExecutorPreference(FileSystemEventExecutor.shared, operation: operation)
 	}
 }

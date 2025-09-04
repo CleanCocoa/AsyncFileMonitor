@@ -1,0 +1,83 @@
+# Race Condition Tests
+
+This test suite demonstrates the critical importance of proper threading and concurrency patterns in file system monitoring. The tests are organized as a progressive story showing what works, what breaks, and why.
+
+## The Story
+
+### 0️⃣ FSEventStream Baseline (`0_FSEventStreamBaseline.swift`)
+**The Foundation: Doing It Right**
+
+This test demonstrates the FSEventStream C API used correctly with proper thread safety. It serves as the gold standard baseline that proves FSEventStream can maintain perfect chronological ordering of file system events when implemented correctly.
+
+- ✅ Thread-safe event collection with proper locking
+- ✅ Serial dispatch queue for event processing 
+- ✅ Perfect chronological ordering maintained under all stress levels
+- ✅ Educational value: Shows the reference implementation
+
+### 1️⃣ FSEventStream Race Conditions (`1_FSEventStreamRaceConditions.swift`) 
+**What Happens When Threading Goes Wrong**
+
+This test deliberately removes thread safety from the FSEventStream implementation to demonstrate the catastrophic effects of race conditions. The unsafe implementation shows real-world consequences of concurrent programming mistakes.
+
+- ❌ No locking around shared mutable state
+- ❌ Concurrent dispatch queue amplifies race conditions
+- ❌ Data corruption and event loss under stress
+- 🎓 Educational value: Tangible demonstration of race condition problems
+
+### 2️⃣ AsyncFileMonitor Behavior (`2_AsyncFileMonitorBehavior.swift`)
+**Swift Concurrency Layer Reality**
+
+This test examines how AsyncFileMonitor (the Swift async/await wrapper) behaves under different load conditions. Unlike the C API baseline, Swift concurrency introduces ordering complexities due to its cooperative scheduling model.
+
+- ✅ Works perfectly under moderate load
+- ⚠️ May experience reordering under high stress (intermittent)
+- 🎓 Educational value: Real-world trade-offs in modern Swift concurrency
+
+### 3️⃣ Event Ordering Regressions (`3_EventOrderingRegressions.swift`)
+**Specific Ordering Guarantees and Edge Cases**
+
+This test focuses on the critical executor preference implementation that maintains event ordering in AsyncFileMonitor. It includes both automated verification and manual regression procedures.
+
+- 🔍 Automated demonstration of current correct behavior
+- 🧪 High-stress test to detect ordering regressions  
+- 📝 Manual procedures to verify executor preference necessity
+- 🎓 Educational value: Deep dive into Swift concurrency execution control
+
+## Test Infrastructure
+
+### Helpers Directory
+The `Helpers/` subdirectory contains shared infrastructure used across all tests:
+
+- **`TestConfiguration.swift`** - Standard test scenarios and file creation utilities
+- **`EventCollector.swift`** - Protocol-based event collection system (thread-safe vs unsafe)
+- **`FSEventStreamTestRunner.swift`** - Concrete test runners and harness implementations  
+- **`TestAssertions.swift`** - Shared assertion utilities and validation functions
+
+### Key Testing Patterns
+
+1. **Parameterized Tests**: Use Swift Testing arguments to run the same test logic across different stress scenarios
+2. **Known Issues Handling**: Use `withKnownIssue(isIntermittent: true)` for race conditions and concurrency edge cases
+3. **Educational Assertions**: Tests document both success and failure modes for learning purposes
+4. **Real FSEventStream Integration**: Tests use actual macOS FSEventStream API, not mocks
+
+## Running the Tests
+
+```bash
+# Run all race condition tests
+swift test --filter RaceConditionTests
+
+# Run specific test files
+swift test --filter 0_FSEventStreamBaseline
+swift test --filter 1_FSEventStreamRaceConditions  
+swift test --filter 2_AsyncFileMonitorBehavior
+swift test --filter 3_EventOrderingRegressions
+```
+
+## Expected Behavior
+
+- **0_FSEventStreamBaseline**: Always passes - demonstrates perfect ordering
+- **1_FSEventStreamRaceConditions**: Passes with known issues - demonstrates race conditions
+- **2_AsyncFileMonitorBehavior**: May show intermittent ordering issues under high stress. Make sure to run multiple times.
+- **3_EventOrderingRegressions**: Demonstrates both working and edge case behaviors
+
+The combination of these tests provides confidence in AsyncFileMonitor's implementation while educating developers about the complexities and trade-offs in concurrent file system monitoring.
