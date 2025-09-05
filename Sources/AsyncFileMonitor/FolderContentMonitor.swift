@@ -143,14 +143,16 @@ public final class FolderContentMonitor: @unchecked Sendable {
 		)
 
 		do {
-			// Create FileSystemEventStream with direct MulticastAsyncStream approach
-			// Events flow directly: FSEventStream callback → MulticastAsyncStream.send() → AsyncStream continuations
+			// Create FileSystemEventStream with event handler closure
+			// Events flow directly: FSEventStream callback → handler closure → MulticastAsyncStream.send() → AsyncStream continuations
 			// This eliminates all Swift concurrency Task scheduling that can cause reordering
 			let stream = try FileSystemEventStream(
 				paths: paths,
 				sinceWhen: sinceWhen,
 				latency: latency,
-				multicastStream: multicastStream
+				eventHandler: { [multicastStream] event in
+					multicastStream.send(event)
+				}
 			)
 
 			fileSystemEventStream = stream
