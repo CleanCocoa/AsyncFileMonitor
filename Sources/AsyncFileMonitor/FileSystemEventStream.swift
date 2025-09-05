@@ -3,6 +3,10 @@
 //  AsyncFileMonitor
 //
 //  RAII wrapper for FSEventStream lifecycle management
+//  Reference: 20250905T073442
+//
+//  Updated to use direct MulticastAsyncStream approach for superior ordering guarantees.
+//  Eliminates Swift concurrency Task scheduling that can cause event reordering.
 //
 
 import Foundation
@@ -13,68 +17,33 @@ public enum FileSystemEventStreamError: Error {
 	case startFailed
 }
 
-/// Private callback handler for FSEventStream events.
-private final class EventStreamCallbackHandler {
-	weak var eventStream: FileSystemEventStream?
-
-	init() {
-		self.eventStream = nil
-	}
-
-	func handleEvents(
-		stream: ConstFSEventStreamRef,
-		numEvents: Int,
-		eventPaths: UnsafeMutableRawPointer,
-		eventFlags: UnsafePointer<FSEventStreamEventFlags>,
-		eventIDs: UnsafePointer<FSEventStreamEventId>
-	) {
-		dispatchPrecondition(condition: .onQueue(FileSystemEventExecutor.shared.underlyingQueue))
-
-		guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
-
-		// Collect events: each FSEvent may be comprised of multiple events we recognize
-		var events: [FolderContentChangeEvent] = []
-		for index in 0..<numEvents {
-			let change = Change(eventFlags: eventFlags[index])
-			let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
-			events.append(event)
-		}
-
-		// Forward events to the event stream
-		eventStream?.forward(events: events)
-	}
-}
-
-private let eventStreamCallback: FSEventStreamCallback = {
+/// Direct FSEventStream callback that sends events immediately to MulticastAsyncStream.
+/// This eliminates Swift concurrency Task scheduling and prevents event reordering.
+private let directEventStreamCallback: FSEventStreamCallback = {
 	(stream, contextInfo, numEvents, eventPaths, eventFlags, eventIDs) in
-	dispatchPrecondition(condition: .onQueue(FileSystemEventExecutor.shared.underlyingQueue))
 	guard let contextInfo else { return }
-	let handler = Unmanaged<EventStreamCallbackHandler>.fromOpaque(contextInfo).takeUnretainedValue()
-	handler.handleEvents(
-		stream: stream,
-		numEvents: numEvents,
-		eventPaths: eventPaths,
-		eventFlags: eventFlags,
-		eventIDs: eventIDs
-	)
+	guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
+
+	// Extract the MulticastAsyncStream from the context
+	let multicastStream = Unmanaged<MulticastAsyncStream<FolderContentChangeEvent>>.fromOpaque(contextInfo)
+		.takeUnretainedValue()
+
+	// Process events directly - no Task scheduling, no actor isolation
+	for index in 0..<numEvents {
+		let change = Change(eventFlags: eventFlags[index])
+		let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
+		multicastStream.send(event)
+	}
 }
 
 /// Thread-safe RAII wrapper for `FSEventStream` lifecycle management.
 ///
 /// This class handles `FSEventStream` creation, configuration, and cleanup using
-/// RAII principles. The deinit can safely run on any thread without assumptions
-/// about actor isolation.
+/// RAII principles. Uses direct MulticastAsyncStream approach for superior event ordering.
 final class FileSystemEventStream {
 	private let streamRef: FSEventStreamRef
-	private let queue: DispatchSerialQueue
-	private let callbackHandler: EventStreamCallbackHandler
-
-	typealias EventHandler = @Sendable (
-		_ events: [FolderContentChangeEvent]
-	) -> Void
-
-	/// Event handler called when file system events occur.
-	private let eventHandler: EventHandler
+	private let queue: DispatchQueue
+	private let multicastStream: MulticastAsyncStream<FolderContentChangeEvent>
 
 	/// Creates and starts an FSEventStream with the specified configuration.
 	///
@@ -82,22 +51,22 @@ final class FileSystemEventStream {
 	///   - paths: File system paths to monitor
 	///   - sinceWhen: FSEvent ID to start monitoring from
 	///   - latency: Event coalescing interval in seconds
-	///   - queue: Dispatch queue for FSEventStream callbacks
+	///   - multicastStream: MulticastAsyncStream to send events to directly
 	/// - Throws: `FileSystemEventStreamError` if stream creation fails
 	init(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId,
 		latency: CFTimeInterval,
-		queue: DispatchSerialQueue,
-		eventHandler: @escaping EventHandler
+		multicastStream: MulticastAsyncStream<FolderContentChangeEvent>
 	) throws {
-		self.queue = queue
-		self.eventHandler = eventHandler
-		self.callbackHandler = EventStreamCallbackHandler()
+		self.queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
+		self.multicastStream = multicastStream
 
+		// Create the callback context - pass the MulticastAsyncStream as the context
+		let contextPointer = Unmanaged.passUnretained(multicastStream).toOpaque()
 		var context = FSEventStreamContext(
 			version: 0,
-			info: Unmanaged.passUnretained(callbackHandler).toOpaque(),
+			info: contextPointer,
 			retain: nil,
 			release: nil,
 			copyDescription: nil
@@ -108,7 +77,7 @@ final class FileSystemEventStream {
 		guard
 			let stream = FSEventStreamCreate(
 				kCFAllocatorDefault,
-				eventStreamCallback,
+				directEventStreamCallback,
 				&context,
 				paths as CFArray,
 				sinceWhen,
@@ -121,9 +90,6 @@ final class FileSystemEventStream {
 
 		self.streamRef = stream
 
-		// Now that all properties are initialized, set up the callback handler
-		callbackHandler.eventStream = self
-
 		// Configure the stream to use our queue and start monitoring
 		FSEventStreamSetDispatchQueue(streamRef, queue)
 
@@ -131,11 +97,6 @@ final class FileSystemEventStream {
 			FSEventStreamRelease(streamRef)
 			throw FileSystemEventStreamError.startFailed
 		}
-	}
-
-	@inlinable
-	internal func forward(events: [FolderContentChangeEvent]) {
-		eventHandler(events)
 	}
 
 	deinit {

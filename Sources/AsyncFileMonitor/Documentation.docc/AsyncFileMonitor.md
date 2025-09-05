@@ -1,19 +1,19 @@
 # AsyncFileMonitor
 
-Modern async/await Swift Package for monitoring file system events using CoreFoundation's FSEvents API.
+Swift Package for monitoring file system events using CoreFoundation's FSEvents API with async/await support.
 
 ## Overview
 
-AsyncFileMonitor is the modernized successor to RxFileMonitor, providing the same powerful file monitoring capabilities with Swift 6 concurrency support. It uses Apple's native FSEvents API for efficient file system monitoring with natural async/await integration.
+AsyncFileMonitor is the successor to RxFileMonitor, providing file monitoring capabilities with Swift 6 concurrency support. It uses Apple's native FSEvents API for file system monitoring with async/await integration.
 
 ### Features
 
-- **Modern Async/await**: Uses `AsyncStream` for natural async/await integration
-- **Swift 6 Ready**: Full concurrency support with `Sendable` conformance  
-- **FSEvents Integration**: Efficient file system monitoring using Apple's native FSEvents API
+- **Async/await Support**: Uses `AsyncStream` for async/await integration
+- **Swift 6 Compatible**: Concurrency support with `Sendable` conformance  
+- **FSEvents Integration**: File system monitoring using Apple's native FSEvents API
 - **Flexible Monitoring**: Monitor single files, directories, or multiple paths
-- **Event Filtering**: Rich event information with detailed change flags
-- **Resource Efficient**: Automatic `FSEventStream` lifecycle management
+- **Event Filtering**: Event information with detailed change flags
+- **Automatic Resource Management**: `FSEventStream` lifecycle management
 
 ## Getting Started
 
@@ -51,8 +51,7 @@ for await event in eventStream {
 // Create a stream with custom configuration
 let eventStream = FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
-    latency: 0.5,  // Coalesce rapid changes
-    qos: .userInitiated
+    latency: 0.5  // Coalesce rapid changes
 )
 
 // Process file events with filtering
@@ -78,21 +77,30 @@ for await event in eventStream {
 ### Monitoring and Streams
 
 - ``StreamLifecycleEvent``
+- ``MulticastAsyncStream``
 
 ## Architecture
 
-AsyncFileMonitor uses a simple, efficient architecture:
+AsyncFileMonitor uses a direct AsyncStream architecture:
 
 ```
-FolderContentMonitor (actor - public API & FSEventStream management)
-    ↓
-StreamRegistrar (actor - continuation management & lifecycle)
-    ↓
-OrderedDictionary<Int, Continuation> (continuation storage)
+FSEventStream (C API) → C Callback → MulticastAsyncStream.send() → AsyncStream Continuations
 ```
+
+This direct flow avoids Swift concurrency Task scheduling that can cause event reordering.
 
 ### Key Design Benefits
 
-The architecture provides several important benefits for efficient file system monitoring:
+The direct AsyncStream architecture provides these benefits:
 
-Resource sharing between multiple `AsyncStream` instances allows multiple consumers to monitor the same path without creating redundant FSEventStreams. Automatic lifecycle management ensures FSEventStreams start when the first client connects and stop when the last disconnects. Thread safety through isolated actors prevents data races and ensures proper resource coordination. The clean, simple API surface makes it easy to integrate file monitoring into any Swift application.
+**Consistent Event Ordering**: Events flow directly from FSEventStream callbacks to AsyncStream continuations without Task boundaries where reordering can occur.
+
+**Resource Sharing**: Multiple `AsyncStream` instances share a single FSEventStream through the MulticastAsyncStream broadcaster.
+
+**Automatic Lifecycle Management**: FSEventStreams start when the first client connects and stop when the last disconnects.
+
+**Thread Safety**: Swift 6 Mutex provides synchronization without actor overhead.
+
+**Ordered Subscribers**: OrderedDictionary preserves subscriber registration order for deterministic event delivery.
+
+**Reduced Overhead**: Avoids actor isolation and Task scheduling overhead compared to approaches that use Swift concurrency primitives.
