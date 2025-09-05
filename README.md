@@ -98,7 +98,7 @@ where event.change.contains(.isFile) && event.change.contains(.modified) {
 
 ### Multiple Concurrent Streams
 
-Each call to `makeStream()` creates an independent stream with its own FSEventStream:
+AsyncFileMonitor uses a multicast AsyncStream approach where multiple streams from the same monitor **share a single FSEventStream** and receive identical events in **registration order**:
 
 ```swift
 // Create multiple independent streams monitoring the same directory
@@ -127,13 +127,21 @@ Task {
 }
 ```
 
+**Ordering Guarantee**: Events are delivered to subscribers in registration order. In the example above, for each file system event:
+
+1. `uiUpdateStream` receives the event first
+2. `backupStream` receives the event second
+3. `logStream` receives the event third
+
+You should probably not rely on the kind of things like subscription order, but I figured it's better you know just in case that you run into concurrency-related issues in your app, than having to guess.
+
 ## Event Types
 
 The `Change` struct provides detailed information about what changed:
 
 ### File Type Flags
 - `.isFile` - The item is a regular file
-- `.isDirectory` - The item is a directory  
+- `.isDirectory` - The item is a directory
 - `.isSymlink` - The item is a symbolic link
 - `.isHardlink` - The item is a hard link
 
@@ -234,29 +242,9 @@ for await event in eventStream {
 }
 ```
 
-## Architecture
+## Demo -- Command Line Tool
 
-AsyncFileMonitor uses a simple, efficient architecture:
-
-```
-FolderContentMonitor (actor - public API & FSEventStream management)
-    ↓
-StreamRegistrar (actor - continuation management & lifecycle)
-    ↓
-OrderedDictionary<Int, Continuation> (continuation storage)
-```
-
-### Key Design Benefits
-
-- **Resource Sharing**: Multiple `AsyncStream` instances can share a single FSEventStream
-- **Automatic Lifecycle**: FSEventStreams start when the first client connects, stop when the last disconnects
-- **Thread Safety**: All coordination happens through isolated actors with custom executors
-- **Configurable Performance**: Each monitor uses a configurable `DispatchSerialQueue` with specified QoS priority
-- **Clean API**: Simple `makeStream()` calls return independent `AsyncStream` instances
-
-## Command Line Tool
-
-AsyncFileMonitor includes a built-in CLI tool for monitoring file changes:
+AsyncFileMonitor includes a built-in CLI tool for monitoring file changes to demo the capabilities:
 
 ```bash
 # Monitor a single directory
@@ -269,14 +257,8 @@ swift run watch /path/to/folder1 /path/to/folder2
 swift run watch
 ```
 
-### CLI Features
-- **Real-time Monitoring**: Live display of file system events with timestamps
-- **Detailed Output**: Shows event path, change types, and event IDs
-- **Multi-path Support**: Monitor multiple directories simultaneously
-- **Path Validation**: Validates paths exist before starting monitoring
-- **Debug Logging**: Enables AsyncFileMonitor's internal logging for troubleshooting
+Example Output:
 
-### Example Output
 ```
 🎯 Starting AsyncFileMonitor CLI
 📁 Monitoring paths:

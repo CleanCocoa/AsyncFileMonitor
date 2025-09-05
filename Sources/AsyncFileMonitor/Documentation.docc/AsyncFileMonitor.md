@@ -66,6 +66,43 @@ for await event in eventStream {
 }
 ```
 
+### Multiple Concurrent Streams
+
+Multiple streams from the same monitor share a single FSEventStream and receive identical events in registration order:
+
+```swift
+let monitor = FolderContentMonitor(url: documentsURL)
+
+// Create streams in specific order
+let uiUpdateStream = monitor.makeStream()
+let backupStream = monitor.makeStream()  
+let logStream = monitor.makeStream()
+
+// Events are delivered in registration order:
+// 1. uiUpdateStream receives event first
+// 2. backupStream receives event second
+// 3. logStream receives event third
+
+Task {
+    for await event in uiUpdateStream {
+        await updateUI(for: event)
+    }
+}
+
+Task {
+    for await event in backupStream {
+        guard event.change.contains(.modified) else { continue }
+        await backupFile(event.url)
+    }
+}
+
+Task {
+    for await event in logStream {
+        logger.info("File changed: \(event.filename)")
+    }
+}
+```
+
 ## Topics
 
 ### Essential Types
