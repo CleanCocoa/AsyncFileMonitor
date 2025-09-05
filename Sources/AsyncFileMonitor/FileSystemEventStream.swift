@@ -2,7 +2,9 @@
 //  FileSystemEventStream.swift
 //  AsyncFileMonitor
 //
-//  RAII wrapper for FSEventStream lifecycle management
+//  Created by Christian Tietze on 2025-09-05.
+//  Copyright © 2025 Christian Tietze (AsyncFileMonitor modernization)
+//
 //  Reference: 20250905T073442
 //
 //  Pure RAII wrapper that manages FSEventStream lifecycle with event handler injection.

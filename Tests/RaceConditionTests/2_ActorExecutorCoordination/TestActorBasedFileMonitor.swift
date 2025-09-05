@@ -2,13 +2,14 @@
 // TestActorBasedFileMonitor.swift
 // RaceConditionTests
 //
-// Test implementation using the actual copied FileSystemEventExecutor and
-// FileSystemEventStream code to demonstrate that even with the library's
-// sophisticated executor-based approach, Swift concurrency can still cause
-// event reordering under stress conditions.
+// Reference: 20250904T080826
 //
-// This proves that the current implementation already uses best practices
-// and the ordering challenges are due to Swift concurrency fundamentals.
+// Actor/executor test implementation preserved from the original main approach.
+// Demonstrates that even with sophisticated executor-based coordination,
+// Swift concurrency can still cause event reordering under stress conditions.
+//
+// This proved that ordering challenges are due to Swift concurrency fundamentals,
+// leading to the development of the direct AsyncStream approach (20250905T073442).
 //
 
 import CoreFoundation

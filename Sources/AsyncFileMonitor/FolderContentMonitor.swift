@@ -8,8 +8,7 @@
 //
 //  Reference: 20250905T073442
 //
-//  Migrated to direct MulticastAsyncStream approach for superior event ordering.
-//  Eliminates actor isolation and Swift concurrency Task scheduling that can cause reordering.
+//  Main monitor implementation using direct MulticastAsyncStream approach for reliable event ordering.
 //
 
 import Foundation

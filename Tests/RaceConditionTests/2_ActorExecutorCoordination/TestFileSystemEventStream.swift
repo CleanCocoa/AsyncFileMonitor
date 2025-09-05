@@ -2,9 +2,11 @@
 //  TestFileSystemEventStream.swift
 //  RaceConditionTests
 //
-//  Direct copy of FileSystemEventStream for testing that demonstrates
-//  even with the actual RAII FSEventStream wrapper and custom executor,
-//  Swift concurrency can still cause event reordering under stress.
+//  Reference: 20250904T080826
+//
+//  Actor/executor implementation of FileSystemEventStream preserved for testing.
+//  This was the main implementation before migration to direct AsyncStream approach.
+//  Demonstrates that even with custom executor, Swift concurrency can cause event reordering.
 //
 
 import Foundation

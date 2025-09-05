@@ -2,9 +2,11 @@
 //  TestFolderContentMonitor.swift
 //  RaceConditionTests
 //
-//  Direct copy of FolderContentMonitor for testing the actor/executor approach
-//  in complete isolation from the main library code. This creates a stable
-//  baseline for the current approach that can be compared against future approaches.
+//  Reference: 20250904T080826
+//
+//  Actor/executor implementation of FolderContentMonitor preserved for testing.
+//  This was the main implementation before migration to direct AsyncStream approach.
+//  Isolated copy maintains stable baseline for comparison with current approach.
 //
 
 import Foundation

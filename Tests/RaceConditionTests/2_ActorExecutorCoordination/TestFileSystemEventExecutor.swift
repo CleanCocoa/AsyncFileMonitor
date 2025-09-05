@@ -2,9 +2,11 @@
 //  TestFileSystemEventExecutor.swift
 //  RaceConditionTests
 //
-//  Direct copy of FileSystemEventExecutor for testing that demonstrates
-//  even with the actual custom executor implementation, Swift concurrency
-//  can still cause event reordering under stress conditions.
+//  Reference: 20250904T080826
+//
+//  Actor/executor implementation of FileSystemEventExecutor preserved for testing.
+//  This custom executor was part of the main implementation before migration.
+//  Demonstrates that even custom executors can't prevent Swift concurrency reordering.
 //
 
 import Foundation

@@ -2,8 +2,10 @@
 //  TestStreamRegistrar.swift
 //  RaceConditionTests
 //
-//  Direct copy of StreamRegistrar for testing the actor/executor approach
-//  in complete isolation from the main library code.
+//  Reference: 20250904T080826
+//
+//  Actor/executor implementation of StreamRegistrar preserved for testing.
+//  This was part of the main implementation before migration to direct AsyncStream approach.
 //
 
 import Collections
