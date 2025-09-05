@@ -41,6 +41,17 @@ This test focuses on the critical executor preference implementation that mainta
 - 📝 Manual procedures to verify executor preference necessity
 - 🎓 Educational value: Deep dive into Swift concurrency execution control
 
+### 4️⃣ Direct AsyncStream Approach (`4_DirectAsyncStream.swift`)
+**Bypassing Actors for Direct Event Streaming**
+
+This test explores a direct AsyncStream.Continuation approach that bypasses actors entirely, using a custom MulticastAsyncStream with OrderedDictionary for multicast event distribution and Swift 6 Mutex for thread safety. Surprisingly, this approach demonstrates **better ordering guarantees** than the actor/executor approach.
+
+- 🔬 Direct FSEventStream callback to AsyncStream.Continuation flow
+- 📡 Custom MulticastAsyncStream implementation with ordered subscriber management
+- 🔒 Swift 6 Mutex for modern, safe synchronization
+- ✅ Maintains perfect ordering even under high stress conditions
+- 🎓 Educational value: Demonstrates that bypassing Swift concurrency can improve ordering reliability
+
 ## Test Infrastructure
 
 ### Test Infrastructure Organization
@@ -80,6 +91,7 @@ swift test --filter 0_FSEventStreamBaseline
 swift test --filter 1_FSEventStreamRaceConditions  
 swift test --filter 2_ActorExecutorCoordination
 swift test --filter 3_EventOrderingRegressions
+swift test --filter 4_DirectAsyncStream
 ```
 
 ## Expected Behavior
@@ -88,5 +100,6 @@ swift test --filter 3_EventOrderingRegressions
 - **1_FSEventStreamRaceConditions**: Passes with known issues - demonstrates race conditions
 - **2_ActorExecutorCoordination**: May show intermittent ordering issues under high stress, proving that even sophisticated executor coordination cannot eliminate Swift concurrency scheduling effects
 - **3_EventOrderingRegressions**: Demonstrates both working and edge case behaviors
+- **4_DirectAsyncStream**: Always passes - demonstrates that direct AsyncStream approach provides better ordering guarantees than actor/executor coordination
 
 The combination of these tests provides confidence in AsyncFileMonitor's implementation while educating developers about the complexities and trade-offs in concurrent file system monitoring.

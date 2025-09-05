@@ -31,19 +31,38 @@ Quick reference guide for developers:
 - Test commands
 - How to break and fix event ordering
 
-## Key Insight
+### [Direct AsyncStream Approach.md](Direct%20AsyncStream%20Approach.md)
+**Superior Alternative**: Documentation of a direct AsyncStream approach that bypasses actors entirely:
+- Eliminates Swift concurrency scheduling issues
+- Uses MulticastAsyncStream with OrderedDictionary for perfect subscriber order
+- Swift 6 Mutex for modern synchronization
+- **Consistently maintains perfect ordering even under extreme stress**
 
-The most important finding from our analysis:
+## Key Insights
 
+The most important findings from our analysis:
+
+### Actor/Executor Approach Limitations
 > **Executor preference is necessary but not sufficient for perfect event ordering**
 
 - **Without executor preference**: Severe reordering occurs consistently
 - **With executor preference**: Mild reordering occurs only under high load
 - **Root cause**: Multiple layers (FSEventStream, dispatch queues, Task creation) can each introduce timing variations
 
-## Reference ID
+### Direct AsyncStream Breakthrough (Reference: 20250905T073442)
+> **Bypassing Swift concurrency entirely eliminates ordering issues**
 
-All critical code sections are tagged with reference ID: **20250904T080826**
+- **Direct FSEventStream → MulticastAsyncStream flow**: Perfect ordering under all tested conditions
+- **No Task scheduling**: Events never cross async/await boundaries where reordering can occur
+- **OrderedDictionary subscribers**: Deterministic event delivery order
+- **Swift 6 Mutex**: Modern, safe synchronization without actor overhead
+
+## Reference IDs
+
+Critical code sections are tagged with reference IDs for traceability:
+
+- **20250904T080826**: Actor/executor approach implementation and analysis
+- **20250905T073442**: Direct AsyncStream approach breakthrough
 
 This allows tracing between:
 - Source code comments
