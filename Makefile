@@ -1,27 +1,47 @@
-.PHONY: format build test clean docs docs-preview docs-static
+# AsyncFileMonitor - Cross-platform file monitoring with Swift
+# Main Makefile that includes modular build components
 
-format:
-	swift format --in-place --recursive --parallel ./Sources ./Tests
+SHELL=/bin/bash -o pipefail
 
-build:
-	swift build
+# Configuration
+prefix ?= /usr/local
+bindir = $(prefix)/bin
+version := $(shell git describe --tags 2>/dev/null || echo "dev")
 
-test:
-	swift test 2>&1 | ./scripts/swift-test-filter.sh
+# Include modular makefiles
+include mk/dev.mk
+include mk/release.mk
 
-clean:
-	swift package clean
+# Combined targets that span multiple modules
+.PHONY: clean
+clean: clean-dev clean-release
 
-docs:
-	swift package --disable-sandbox generate-documentation --target AsyncFileMonitor
+.PHONY: test-all
+test-all: test test-integration test-linux
 
-docs-preview:
-	swift package --disable-sandbox preview-documentation --target AsyncFileMonitor
+# Default target
+.PHONY: all
+all: build
 
-docs-static:
-	swift package --allow-writing-to-directory docs/ \
-		--disable-sandbox generate-documentation \
-		--target AsyncFileMonitor \
-		--disable-indexing \
-		--transform-for-static-hosting \
-		--output-path docs/
+# Help target
+.PHONY: help
+help:
+	@echo "AsyncFileMonitor Build System"
+	@echo ""
+	@echo "Development targets:"
+	@echo "  build            Build for current platform"
+	@echo "  test             Run Swift tests"
+	@echo "  test-integration Run watch CLI integration tests"
+	@echo "  format           Format code"
+	@echo "  lint             Lint code"
+	@echo "  docs             Generate documentation"
+	@echo ""
+	@echo "Release targets:"
+	@echo "  release          Build cross-platform release artifacts"
+	@echo "  test-linux       Test Linux build in Docker"
+	@echo "  docker-test      Test Docker build"
+	@echo ""
+	@echo "Combined targets:"
+	@echo "  clean            Clean all build artifacts"
+	@echo "  test-all         Run all tests"
+	@echo "  help             Show this help"

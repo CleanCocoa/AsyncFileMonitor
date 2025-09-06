@@ -30,6 +30,7 @@ struct Watch {
 			print("   • \(path)")
 		}
 		print("📡 Press Ctrl+C to stop monitoring\n")
+		fflush(stdout)
 
 		// Note: AsyncFileMonitorLogger removed for simplicity
 
@@ -45,6 +46,7 @@ struct Watch {
 			print("                🔄 \(changeDescription)")
 			print("                🆔 Event ID: \(event.eventID)")
 			print("")
+			fflush(stdout)
 		}
 	}
 }
