@@ -1,0 +1,5 @@
+module Clibuv [system] [extern_c] {
+    header "uv.h"
+    link "uv"
+    export *
+}

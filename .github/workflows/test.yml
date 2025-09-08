@@ -1,0 +1,56 @@
+name: CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+env:
+  CLICOLOR: 1
+
+jobs:
+  test-macos:
+    name: Test on macOS 15
+    runs-on: macOS-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode Select Version
+        uses: mobiledevops/xcode-select-version-action@v1
+        with:
+          xcode-select-version: 16.3
+      - name: Test
+        run: set -o pipefail && swift test | xcbeautify --renderer github-actions
+      - name: Test Watch CLI
+        run: ./scripts/test-watch.sh
+        
+  test-ubuntu:
+    name: Test on Ubuntu 24.04
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install libuv
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libuv1-dev pkg-config
+      - name: Test
+        run: set -o pipefail && swift test
+      - name: Test Watch CLI on Linux
+        run: ./scripts/test-watch.sh
+        
+  swift-format:
+    name: swift-format
+    runs-on: macOS-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Xcode Select Version
+        uses: mobiledevops/xcode-select-version-action@v1
+        with:
+          xcode-select-version: 16.3
+      - name: Format and lint
+        run: swift format lint --recursive --parallel --strict .

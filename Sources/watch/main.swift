@@ -24,7 +24,15 @@ struct Watch {
 			}
 		}
 
-		print("🎯 Starting AsyncFileMonitor CLI")
+		#if os(macOS)
+		let platform = "macOS (FSEvents)"
+		#elseif os(Linux)
+		let platform = "Linux (libuv)"
+		#else
+		let platform = "Unknown"
+		#endif
+
+		print("🎯 Starting AsyncFileMonitor CLI (\(platform))")
 		print("📁 Monitoring paths:")
 		for path in paths {
 			print("   • \(path)")
@@ -32,10 +40,8 @@ struct Watch {
 		print("📡 Press Ctrl+C to stop monitoring\n")
 		fflush(stdout)
 
-		// Note: AsyncFileMonitorLogger removed for simplicity
-
-		// Create the monitor stream
-		let stream = FolderContentMonitor.makeStream(paths: paths)
+		// Create the monitor stream using cross-platform API
+		let stream = AsyncFileMonitor.monitor(paths: paths)
 
 		// Monitor for changes
 		for await event in stream {

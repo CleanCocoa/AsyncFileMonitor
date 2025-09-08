@@ -4,8 +4,12 @@
 FROM --platform=$BUILDPLATFORM docker.io/swift:6.1.0 AS build
 WORKDIR /workspace
 
-# Install libuv development headers
-RUN apt-get update && apt-get install -y libuv1-dev pkg-config && rm -rf /var/lib/apt/lists/*
+# Install libuv development headers and dependencies
+RUN apt-get update && apt-get install -y \
+    libuv1-dev \
+    pkg-config \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Swift static SDK for Linux
 RUN swift sdk install \

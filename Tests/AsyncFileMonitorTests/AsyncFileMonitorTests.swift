@@ -33,7 +33,7 @@ func fileMonitoringIntegration() async throws {
 	try "File C".write(to: fileC, atomically: true, encoding: .utf8)
 
 	// Set up monitor with a small latency to coalesce rapid changes
-	let eventStream = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+	let eventStream = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
 
 	// Monitor events and confirm we receive the expected ones
 	try await confirmation("Receive file system events", expectedCount: 2) { confirm in
@@ -91,9 +91,9 @@ func multipleStreamsFromSingleMonitor() async throws {
 	try "Initial".write(to: testFile, atomically: true, encoding: .utf8)
 
 	// Create multiple streams for the same directory
-	let stream1 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
-	let stream2 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
-	let stream3 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+	let stream1 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+	let stream2 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
+	let stream3 = AsyncFileMonitor.monitor(url: tempDir, latency: 0.1)
 
 	// Monitor events and confirm each stream receives them
 	try await confirmation("All streams receive file system events", expectedCount: 6) { confirm in
@@ -172,7 +172,7 @@ func eventOrderingWithCoalescedEvents() async throws {
 	}
 
 	// Set up monitor with higher latency to encourage coalescing
-	let eventStream = FolderContentMonitor.makeStream(url: tempDir, latency: 0.2)
+	let eventStream = AsyncFileMonitor.monitor(url: tempDir, latency: 0.2)
 
 	// Create many numbered files rapidly to trigger coalescing
 	let fileCount = 50
