@@ -8,7 +8,7 @@
 //  This was part of the main implementation before migration to direct AsyncStream approach.
 //
 
-import Collections
+import OrderedCollections
 import Foundation
 
 @testable import AsyncFileMonitor
