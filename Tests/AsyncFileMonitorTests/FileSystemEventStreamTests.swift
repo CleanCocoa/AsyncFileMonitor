@@ -17,7 +17,7 @@ struct FileSystemEventStreamTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		try await confirmation(expectedCount: 1) { confirmation in
-			let stream = try FileSystemEventStream(
+			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.1
@@ -45,7 +45,7 @@ struct FileSystemEventStreamTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		for iteration in 0..<50 {
-			let stream = try FileSystemEventStream(
+			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.01
@@ -74,7 +74,7 @@ struct FileSystemEventStreamTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		for iteration in 0..<100 {
-			_ = try FileSystemEventStream(
+			_ = try FileSystemEventStream.make(
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.01
@@ -99,7 +99,7 @@ struct FileSystemEventStreamTests {
 		try await confirmation(expectedCount: 3) { confirmation in
 			let fileNames = ["file1.txt", "file2.txt", "file3.txt"]
 
-			let stream = try FileSystemEventStream(
+			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.1

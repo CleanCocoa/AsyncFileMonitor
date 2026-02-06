@@ -42,19 +42,11 @@ import Synchronization
 /// - No actor isolation or Task scheduling to prevent event reordering
 /// - Swift 6 Mutex for thread-safe subscriber management
 /// - OrderedDictionary preserves subscriber registration order
-public final class FolderContentMonitor: Sendable {
-	private enum State {
+nonisolated public final class FolderContentMonitor: Sendable {
+	private enum State: ~Copyable {
 		case idle
 		case awaitingSubscribers(lifecycleTask: Task<Void, Never>)
 		case streaming(lifecycleTask: Task<Void, Never>, eventStream: FileSystemEventStream)
-
-		var lifecycleTask: Task<Void, Never>? {
-			switch self {
-			case .idle: nil
-			case .awaitingSubscribers(let task): task
-			case .streaming(let task, _): task
-			}
-		}
 	}
 
 	private let multicastStream = MulticastAsyncStream<FolderContentChangeEvent>()
@@ -113,7 +105,18 @@ public final class FolderContentMonitor: Sendable {
 	}
 
 	deinit {
-		state.withLock { $0.lifecycleTask }?.cancel()
+		state.withLock { state in
+			switch consume state {
+			case .idle:
+				state = .idle
+			case .awaitingSubscribers(let task):
+				task.cancel()
+				state = .idle
+			case .streaming(let task, _):
+				task.cancel()
+				state = .idle
+			}
+		}
 	}
 
 	/// Create a new `AsyncStream` of change events for this monitor.
@@ -133,52 +136,66 @@ public final class FolderContentMonitor: Sendable {
 	/// and stopped when the last stream is removed.
 	private func setupLifecycleManagement() {
 		state.withLock { state in
-			guard case .idle = state else { return }
-
-			let lifecycleEvents = multicastStream.makeLifecycleStream()
-
-			let task = Task { [weak self] in
-				for await event in lifecycleEvents {
-					switch event {
-					case .firstStreamAdded: self?.start()
-					case .lastStreamRemoved: self?.stop()
+			switch consume state {
+			case .idle:
+				let lifecycleEvents = multicastStream.makeLifecycleStream()
+				let task = Task { [weak self] in
+					for await event in lifecycleEvents {
+						switch event {
+						case .firstStreamAdded: self?.start()
+						case .lastStreamRemoved: self?.stop()
+						}
 					}
 				}
+				state = .awaitingSubscribers(lifecycleTask: task)
+			case .awaitingSubscribers(let task):
+				state = .awaitingSubscribers(lifecycleTask: task)
+			case .streaming(let task, let eventStream):
+				state = .streaming(lifecycleTask: task, eventStream: eventStream)
 			}
-			state = .awaitingSubscribers(lifecycleTask: task)
 		}
 	}
 
 	private func start() {
 		state.withLock { state in
-			guard case .awaitingSubscribers(let task) = state else {
-				assertionFailure("start() called in unexpected state: \(state)")
-				return
-			}
-
-			do {
-				let eventStream = try FileSystemEventStream(
-					paths: paths,
-					sinceWhen: sinceWhen,
-					latency: latency,
-					eventHandler: { [multicastStream] event in
-						multicastStream.send(event)
-					}
-				)
+			switch consume state {
+			case .awaitingSubscribers(let task):
+				do {
+					let eventStream = try FileSystemEventStream.make(
+						paths: paths,
+						sinceWhen: sinceWhen,
+						latency: latency,
+						eventHandler: { [multicastStream] event in
+							multicastStream.send(event)
+						}
+					)
+					state = .streaming(lifecycleTask: task, eventStream: eventStream)
+				} catch {
+					state = .awaitingSubscribers(lifecycleTask: task)
+					print("Failed to create FileSystemEventStream: \(error)")
+				}
+			case .idle:
+				state = .idle
+				assertionFailure("start() called in unexpected state")
+			case .streaming(let task, let eventStream):
 				state = .streaming(lifecycleTask: task, eventStream: eventStream)
-			} catch {
-				print("Failed to create FileSystemEventStream: \(error)")
+				assertionFailure("start() called in unexpected state")
 			}
 		}
 	}
 
 	private func stop() {
 		state.withLock { state in
-			guard case .streaming(let task, _) = state else {
-				assertionFailure("stop() called in unexpected state: \(state)")
-				return
+			switch consume state {
+			case .streaming(let task, _):
+				state = .awaitingSubscribers(lifecycleTask: task)
+			case .idle:
+				state = .idle
+				assertionFailure("stop() called in unexpected state")
+			case .awaitingSubscribers(let task):
+				state = .awaitingSubscribers(lifecycleTask: task)
+				assertionFailure("stop() called in unexpected state")
 			}
-			state = .awaitingSubscribers(lifecycleTask: task)
 		}
 	}
 
@@ -241,5 +258,4 @@ public final class FolderContentMonitor: Sendable {
 
 		return outerStream
 	}
-
 }

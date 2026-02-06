@@ -57,10 +57,16 @@ private let directEventStreamCallback: FSEventStreamCallback = {
 /// This class handles `FSEventStream` creation, configuration, and cleanup using
 /// RAII principles. Events are forwarded to the provided handler closure.
 /// The FileSystemEventStream has exactly one "port" - the event handler closure.
-final class FileSystemEventStream: @unchecked Sendable {
+struct FileSystemEventStream: ~Copyable {
 	private let streamRef: FSEventStreamRef
 	private let queue: DispatchQueue
 	private let eventHandlerBox: EventHandlerBox
+
+	private init(streamRef: FSEventStreamRef, queue: DispatchQueue, eventHandlerBox: EventHandlerBox) {
+		self.streamRef = streamRef
+		self.queue = queue
+		self.eventHandlerBox = eventHandlerBox
+	}
 
 	/// Creates and starts an FSEventStream with the specified configuration.
 	///
@@ -70,14 +76,14 @@ final class FileSystemEventStream: @unchecked Sendable {
 	///   - latency: Event coalescing interval in seconds
 	///   - eventHandler: Sendable closure to handle events
 	/// - Throws: `FileSystemEventStreamError` if stream creation fails
-	init(
+	static func make(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId,
 		latency: CFTimeInterval,
 		eventHandler: @escaping @Sendable (FolderContentChangeEvent) -> Void
-	) throws {
-		self.queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
-		self.eventHandlerBox = EventHandlerBox(handler: eventHandler)
+	) throws -> FileSystemEventStream {
+		let queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
+		let eventHandlerBox = EventHandlerBox(handler: eventHandler)
 
 		let contextPointer = Unmanaged.passUnretained(eventHandlerBox).toOpaque()
 		var context = FSEventStreamContext(
@@ -107,19 +113,17 @@ final class FileSystemEventStream: @unchecked Sendable {
 				flags
 			)
 		else {
-			// The fact that FSEventStreamCreate returns an Optional<OpaquePointer> could simply be a Swift API translation artifact. When this fails, we might as well crash the app.
 			throw FileSystemEventStreamError.creationFailed
 		}
 
-		self.streamRef = stream
+		FSEventStreamSetDispatchQueue(stream, queue)
 
-		// Configure the stream to use our queue and start monitoring
-		FSEventStreamSetDispatchQueue(streamRef, queue)
-
-		guard FSEventStreamStart(streamRef) else {
-			FSEventStreamRelease(streamRef)
+		guard FSEventStreamStart(stream) else {
+			FSEventStreamRelease(stream)
 			throw FileSystemEventStreamError.startFailed
 		}
+
+		return FileSystemEventStream(streamRef: stream, queue: queue, eventHandlerBox: eventHandlerBox)
 	}
 
 	deinit {
