@@ -43,13 +43,22 @@ import Synchronization
 /// - Swift 6 Mutex for thread-safe subscriber management
 /// - OrderedDictionary preserves subscriber registration order
 public final class FolderContentMonitor: Sendable {
-	private struct State {
-		var fileSystemEventStream: FileSystemEventStream?
-		var lifecycleTask: Task<Void, Never>?
+	private enum State {
+		case idle
+		case awaitingSubscribers(lifecycleTask: Task<Void, Never>)
+		case streaming(lifecycleTask: Task<Void, Never>, eventStream: FileSystemEventStream)
+
+		var lifecycleTask: Task<Void, Never>? {
+			switch self {
+			case .idle: nil
+			case .awaitingSubscribers(let task): task
+			case .streaming(let task, _): task
+			}
+		}
 	}
 
 	private let multicastStream = MulticastAsyncStream<FolderContentChangeEvent>()
-	private let state = Mutex(State())
+	private let state = Mutex(State.idle)
 
 	/// The paths being monitored.
 	///
@@ -124,11 +133,11 @@ public final class FolderContentMonitor: Sendable {
 	/// and stopped when the last stream is removed.
 	private func setupLifecycleManagement() {
 		state.withLock { state in
-			guard state.lifecycleTask == nil else { return }
+			guard case .idle = state else { return }
 
 			let lifecycleEvents = multicastStream.makeLifecycleStream()
 
-			state.lifecycleTask = Task { [weak self] in
+			let task = Task { [weak self] in
 				for await event in lifecycleEvents {
 					switch event {
 					case .firstStreamAdded: self?.start()
@@ -136,18 +145,19 @@ public final class FolderContentMonitor: Sendable {
 					}
 				}
 			}
+			state = .awaitingSubscribers(lifecycleTask: task)
 		}
 	}
 
 	private func start() {
 		state.withLock { state in
-			assert(
-				state.fileSystemEventStream == nil,
-				"Should be impossible to run start twice in a row unless we have a race condition"
-			)
+			guard case .awaitingSubscribers(let task) = state else {
+				assertionFailure("start() called in unexpected state: \(state)")
+				return
+			}
 
 			do {
-				state.fileSystemEventStream = try FileSystemEventStream(
+				let eventStream = try FileSystemEventStream(
 					paths: paths,
 					sinceWhen: sinceWhen,
 					latency: latency,
@@ -155,6 +165,7 @@ public final class FolderContentMonitor: Sendable {
 						multicastStream.send(event)
 					}
 				)
+				state = .streaming(lifecycleTask: task, eventStream: eventStream)
 			} catch {
 				print("Failed to create FileSystemEventStream: \(error)")
 			}
@@ -162,7 +173,13 @@ public final class FolderContentMonitor: Sendable {
 	}
 
 	private func stop() {
-		state.withLock { $0.fileSystemEventStream = nil }
+		state.withLock { state in
+			guard case .streaming(let task, _) = state else {
+				assertionFailure("stop() called in unexpected state: \(state)")
+				return
+			}
+			state = .awaitingSubscribers(lifecycleTask: task)
+		}
 	}
 
 	// MARK: - Static Convenience Methods
