@@ -123,13 +123,13 @@ public final class FolderContentMonitor: @unchecked Sendable {
 		// Set up the lifecycle stream to monitor subscriber changes
 		let lifecycleEvents = multicastStream.makeLifecycleStream()
 
-		lifecycleTask = Task {
+		lifecycleTask = Task { [weak self] in
 			for await event in lifecycleEvents {
 				switch event {
 				case .firstStreamAdded:
-					start()
+					self?.start()
 				case .lastStreamRemoved:
-					stop()
+					self?.stop()
 				}
 			}
 		}

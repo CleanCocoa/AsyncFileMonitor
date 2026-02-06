@@ -27,7 +27,7 @@ struct MemoryLeakTests {
 		#expect(weakMonitor == nil)
 	}
 
-	// MARK: - Retain cycle: lifecycleTask captures self
+	// MARK: - Lifecycle: monitor deallocates after streams end
 
 	@Test func `monitor deallocates after stream is dropped without iteration`() async throws {
 		let tempDir = try Self.makeTempDir()
@@ -42,9 +42,7 @@ struct MemoryLeakTests {
 
 		try await Task.sleep(for: .milliseconds(500))
 
-		withKnownIssue("lifecycleTask captures self via start()/stop(), creating a retain cycle") {
-			#expect(weakMonitor == nil)
-		}
+		#expect(weakMonitor == nil)
 	}
 
 	@Test func `monitor deallocates after consumer breaks from iteration`() async throws {
@@ -72,9 +70,7 @@ struct MemoryLeakTests {
 
 		try await Task.sleep(for: .milliseconds(500))
 
-		withKnownIssue("lifecycleTask holds self even after all consumers stopped") {
-			#expect(weakMonitor == nil)
-		}
+		#expect(weakMonitor == nil)
 	}
 
 	@Test func `monitor deallocates after multiple streams created and dropped`() async throws {
@@ -93,9 +89,7 @@ struct MemoryLeakTests {
 
 		try await Task.sleep(for: .milliseconds(500))
 
-		withKnownIssue("lifecycleTask retains monitor permanently") {
-			#expect(weakMonitor == nil)
-		}
+		#expect(weakMonitor == nil)
 	}
 
 	// MARK: - MulticastAsyncStream baseline
