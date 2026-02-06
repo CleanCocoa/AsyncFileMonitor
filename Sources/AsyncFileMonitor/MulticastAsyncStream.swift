@@ -41,14 +41,15 @@ public enum StreamLifecycleEvent: Sendable {
 /// - **Lifecycle management**: Automatic start/stop based on subscriber count
 /// - **High performance**: No actor isolation or Task scheduling overhead
 public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
-	private let continuations: Mutex<OrderedDictionary<UUID, AsyncStream<T>.Continuation>>
-	private let lifecycleContinuation: Mutex<AsyncStream<StreamLifecycleEvent>.Continuation?>
-	private let streamCount: Mutex<Int>
+	private struct State {
+		var continuations: OrderedDictionary<UUID, AsyncStream<T>.Continuation> = .init()
+		var lifecycleContinuation: AsyncStream<StreamLifecycleEvent>.Continuation?
+	}
+
+	private let state: Mutex<State>
 
 	public init() {
-		self.continuations = Mutex(OrderedDictionary<UUID, AsyncStream<T>.Continuation>())
-		self.lifecycleContinuation = Mutex(nil)
-		self.streamCount = Mutex(0)
+		self.state = Mutex(State())
 	}
 
 	/// Create a stream that emits lifecycle events (first stream added, last stream removed).
@@ -56,8 +57,8 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	/// - Returns: An `AsyncStream` of `StreamLifecycleEvent` values
 	public func makeLifecycleStream() -> AsyncStream<StreamLifecycleEvent> {
 		let (stream, continuation) = AsyncStream<StreamLifecycleEvent>.makeStream()
-		lifecycleContinuation.withLock { lifecycleCont in
-			lifecycleCont = continuation
+		state.withLock { state in
+			state.lifecycleContinuation = continuation
 		}
 		return stream
 	}
@@ -72,42 +73,22 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 		let id = UUID()
 		let (stream, continuation) = AsyncStream<T>.makeStream()
 
-		// Check if this is the first stream
-		let wasEmpty = continuations.withLock { dict in
-			let isEmpty = dict.isEmpty
-			dict[id] = continuation
-			return isEmpty
+		state.withLock { state in
+			let wasEmpty = state.continuations.isEmpty
+			state.continuations[id] = continuation
+			if wasEmpty {
+				_ = state.lifecycleContinuation?.yield(.firstStreamAdded)
+			}
 		}
 
-		// Update stream count
-		streamCount.withLock { count in
-			count += 1
-		}
-
-		// Set up cleanup when stream terminates
 		continuation.onTermination = { [weak self] _ in
 			guard let self = self else { return }
 
-			let becameEmpty = self.continuations.withLock { dict in
-				_ = dict.removeValue(forKey: id)
-				return dict.isEmpty
-			}
-
-			self.streamCount.withLock { count in
-				count = max(0, count - 1)
-			}
-
-			if becameEmpty {
-				self.lifecycleContinuation.withLock { lifecycleCont in
-					_ = lifecycleCont?.yield(.lastStreamRemoved)
+			self.state.withLock { state in
+				_ = state.continuations.removeValue(forKey: id)
+				if state.continuations.isEmpty {
+					_ = state.lifecycleContinuation?.yield(.lastStreamRemoved)
 				}
-			}
-		}
-
-		// Emit first stream added event if this is the first stream
-		if wasEmpty {
-			lifecycleContinuation.withLock { lifecycleCont in
-				_ = lifecycleCont?.yield(.firstStreamAdded)
 			}
 		}
 
@@ -122,8 +103,8 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	///
 	/// - Parameter value: The element to broadcast to all active streams
 	public func send(_ value: T) {
-		let currentContinuations = continuations.withLock { dict in
-			Array(dict.values)
+		let currentContinuations = state.withLock { state in
+			Array(state.continuations.values)
 		}
 
 		for continuation in currentContinuations {
@@ -135,6 +116,6 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	///
 	/// - Returns: The number of currently registered stream continuations
 	public var currentStreamCount: Int {
-		streamCount.withLock { $0 }
+		state.withLock { $0.continuations.count }
 	}
 }

@@ -38,13 +38,13 @@ private final class EventHandlerBox {
 private let directEventStreamCallback: FSEventStreamCallback = {
 	(stream, contextInfo, numEvents, eventPaths, eventFlags, eventIDs) in
 	guard let contextInfo else { return }
-	guard let paths = unsafeBitCast(eventPaths, to: NSArray.self) as? [String] else { return }
+	guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as NSArray as? [String] else {
+		return
+	}
 
-	// Extract the event handler from the context
 	let eventHandler = Unmanaged<EventHandlerBox>.fromOpaque(contextInfo)
 		.takeUnretainedValue().handler
 
-	// Process events directly - no Task scheduling, no actor isolation
 	for index in 0..<numEvents {
 		let change = Change(eventFlags: eventFlags[index])
 		let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
@@ -79,13 +79,18 @@ final class FileSystemEventStream {
 		self.queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
 		self.eventHandlerBox = EventHandlerBox(handler: eventHandler)
 
-		// Create the callback context - pass the event handler box as the context
 		let contextPointer = Unmanaged.passUnretained(eventHandlerBox).toOpaque()
 		var context = FSEventStreamContext(
 			version: 0,
 			info: contextPointer,
-			retain: nil,
-			release: nil,
+			retain: { info -> UnsafeRawPointer? in
+				guard let info else { return nil }
+				return UnsafeRawPointer(Unmanaged<EventHandlerBox>.fromOpaque(info).retain().toOpaque())
+			},
+			release: { info in
+				guard let info else { return }
+				Unmanaged<EventHandlerBox>.fromOpaque(info).release()
+			},
 			copyDescription: nil
 		)
 

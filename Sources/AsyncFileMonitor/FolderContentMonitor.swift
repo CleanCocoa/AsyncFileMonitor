@@ -45,6 +45,7 @@ public final class FolderContentMonitor: @unchecked Sendable {
 	private let multicastStream = MulticastAsyncStream<FolderContentChangeEvent>()
 	private var fileSystemEventStream: FileSystemEventStream?
 	private var lifecycleTask: Task<Void, Never>?
+	private let lock = NSLock()
 
 	/// The paths being monitored.
 	///
@@ -99,7 +100,10 @@ public final class FolderContentMonitor: @unchecked Sendable {
 	}
 
 	deinit {
-		lifecycleTask?.cancel()
+		lock.lock()
+		let task = lifecycleTask
+		lock.unlock()
+		task?.cancel()
 	}
 
 	/// Create a new `AsyncStream` of change events for this monitor.
@@ -118,12 +122,15 @@ public final class FolderContentMonitor: @unchecked Sendable {
 	/// This method ensures that the FSEventStream is started when the first stream is added
 	/// and stopped when the last stream is removed.
 	private func setupLifecycleManagement() {
-		guard lifecycleTask == nil else { return }
+		lock.lock()
+		guard lifecycleTask == nil else {
+			lock.unlock()
+			return
+		}
 
-		// Set up the lifecycle stream to monitor subscriber changes
 		let lifecycleEvents = multicastStream.makeLifecycleStream()
 
-		lifecycleTask = Task { [weak self] in
+		let task = Task { [weak self] in
 			for await event in lifecycleEvents {
 				switch event {
 				case .firstStreamAdded:
@@ -133,18 +140,21 @@ public final class FolderContentMonitor: @unchecked Sendable {
 				}
 			}
 		}
+
+		lifecycleTask = task
+		lock.unlock()
 	}
 
 	private func start() {
+		lock.lock()
+		defer { lock.unlock() }
+
 		precondition(
 			fileSystemEventStream == nil,
 			"Should be impossible to run start twice in a row unless we have a race condition"
 		)
 
 		do {
-			// Create FileSystemEventStream with event handler closure
-			// Events flow directly: FSEventStream callback → handler closure → MulticastAsyncStream.send() → AsyncStream continuations
-			// This eliminates all Swift concurrency Task scheduling that can cause reordering
 			let stream = try FileSystemEventStream(
 				paths: paths,
 				sinceWhen: sinceWhen,
@@ -156,14 +166,13 @@ public final class FolderContentMonitor: @unchecked Sendable {
 
 			fileSystemEventStream = stream
 		} catch {
-			// If FSEventStream creation fails, we can't monitor
-			// The fileSystemEventStream remains nil, so no events will be delivered
 			print("Failed to create FileSystemEventStream: \(error)")
 		}
 	}
 
 	private func stop() {
-		// Simply release the file system event stream - its deinit will handle cleanup
+		lock.lock()
+		defer { lock.unlock() }
 		fileSystemEventStream = nil
 	}
 
@@ -190,17 +199,22 @@ public final class FolderContentMonitor: @unchecked Sendable {
 			latency: latency
 		)
 
-		return AsyncStream { continuation in
-			Task {
-				let stream = monitor.makeStream()
-				for await event in stream {
-					continuation.yield(event)
-				}
-				continuation.finish()
-				// Keep monitor alive by capturing it
-				_ = monitor
+		let innerStream = monitor.makeStream()
+		let (outerStream, outerContinuation) = AsyncStream<FolderContentChangeEvent>.makeStream()
+
+		let task = Task {
+			for await event in innerStream {
+				outerContinuation.yield(event)
 			}
+			outerContinuation.finish()
 		}
+
+		outerContinuation.onTermination = { _ in
+			task.cancel()
+			withExtendedLifetime(monitor) {}
+		}
+
+		return outerStream
 	}
 
 	/// Create an `AsyncStream` to monitor file system events.
@@ -224,18 +238,22 @@ public final class FolderContentMonitor: @unchecked Sendable {
 			latency: latency
 		)
 
-		// Keep monitor alive as long as stream is active
-		return AsyncStream { continuation in
-			Task {
-				let stream = monitor.makeStream()
-				for await event in stream {
-					continuation.yield(event)
-				}
-				continuation.finish()
-				// Keep monitor alive by capturing it
-				_ = monitor
+		let innerStream = monitor.makeStream()
+		let (outerStream, outerContinuation) = AsyncStream<FolderContentChangeEvent>.makeStream()
+
+		let task = Task {
+			for await event in innerStream {
+				outerContinuation.yield(event)
 			}
+			outerContinuation.finish()
 		}
+
+		outerContinuation.onTermination = { _ in
+			task.cancel()
+			withExtendedLifetime(monitor) {}
+		}
+
+		return outerStream
 	}
 
 }
