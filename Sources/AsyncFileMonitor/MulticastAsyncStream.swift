@@ -58,6 +58,7 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	public func makeLifecycleStream() -> AsyncStream<StreamLifecycleEvent> {
 		let (stream, continuation) = AsyncStream<StreamLifecycleEvent>.makeStream()
 		state.withLock { state in
+			state.lifecycleContinuation?.finish()
 			state.lifecycleContinuation = continuation
 		}
 		return stream

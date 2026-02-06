@@ -25,7 +25,7 @@ public enum FileSystemEventStreamError: Error {
 /// This approach is cleaner than self-references because it avoids the complexity
 /// of Swift's initialization requirements when passing `self` to C callbacks.
 /// The box pattern allows clean separation between the RAII wrapper and the callback context.
-private final class EventHandlerBox {
+private final class EventHandlerBox: Sendable {
 	let handler: @Sendable (FolderContentChangeEvent) -> Void
 
 	init(handler: @escaping @Sendable (FolderContentChangeEvent) -> Void) {
@@ -57,7 +57,7 @@ private let directEventStreamCallback: FSEventStreamCallback = {
 /// This class handles `FSEventStream` creation, configuration, and cleanup using
 /// RAII principles. Events are forwarded to the provided handler closure.
 /// The FileSystemEventStream has exactly one "port" - the event handler closure.
-final class FileSystemEventStream {
+final class FileSystemEventStream: @unchecked Sendable {
 	private let streamRef: FSEventStreamRef
 	private let queue: DispatchQueue
 	private let eventHandlerBox: EventHandlerBox
