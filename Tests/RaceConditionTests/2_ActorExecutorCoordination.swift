@@ -73,16 +73,17 @@ private func runCoordinationTest(
 	defer { cleanupTempDirectory(tempDir) }
 
 	let monitor = TestActorBasedFileMonitor(url: tempDir)
-	var receivedEvents: [FolderContentChangeEvent] = []
 
-	let task = Task {
+	let task = Task { () -> [FolderContentChangeEvent] in
+		var events: [FolderContentChangeEvent] = []
 		let stream = await monitor.makeStream()
 		for await event in stream {
 			let filename = event.filename
 			if filename.hasPrefix(filePrefix) && filename.hasSuffix(".txt") && event.change.contains(.created) {
-				receivedEvents.append(event)
+				events.append(event)
 			}
 		}
+		return events
 	}
 
 	// Small delay for monitor to start
@@ -102,7 +103,7 @@ private func runCoordinationTest(
 
 	task.cancel()
 
-	return receivedEvents
+	return await task.value
 }
 
 /// Check if event filenames are in chronological order

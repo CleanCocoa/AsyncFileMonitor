@@ -70,16 +70,17 @@ private func runDirectStreamTest(
 	defer { cleanupTempDirectory(tempDir) }
 
 	let monitor = DirectStreamFileMonitor(url: tempDir)
-	var receivedEvents: [FolderContentChangeEvent] = []
 
-	let task = Task {
+	let task = Task { () -> [FolderContentChangeEvent] in
+		var events: [FolderContentChangeEvent] = []
 		let stream = monitor.makeStream()
 		for await event in stream {
 			let filename = event.filename
 			if filename.hasPrefix(filePrefix) && filename.hasSuffix(".txt") && event.change.contains(.created) {
-				receivedEvents.append(event)
+				events.append(event)
 			}
 		}
+		return events
 	}
 
 	// Small delay for monitor to start
@@ -99,7 +100,7 @@ private func runDirectStreamTest(
 
 	task.cancel()
 
-	return receivedEvents
+	return await task.value
 }
 
 /// Check if event filenames are in chronological order
