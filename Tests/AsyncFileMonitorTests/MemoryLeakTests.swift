@@ -92,6 +92,42 @@ struct MemoryLeakTests {
 		#expect(weakMonitor == nil)
 	}
 
+	@Test func `monitor deallocates when in awaitingSubscribers state`() async throws {
+		let tempDir = try Self.makeTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+
+		weak var weakMonitor: FolderContentMonitor?
+		do {
+			let monitor = FolderContentMonitor(url: tempDir)
+			weakMonitor = monitor
+			let stream = monitor.makeStream()
+			let task = Task { for await _ in stream {} }
+			try await Task.sleep(for: .milliseconds(200))
+			task.cancel()
+			await task.value
+			try await Task.sleep(for: .milliseconds(200))
+		}
+
+		try await Task.sleep(for: .milliseconds(500))
+
+		#expect(weakMonitor == nil)
+	}
+
+	@Test func `static makeStream monitor deallocates when stream is dropped`() async throws {
+		let tempDir = try Self.makeTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+
+		do {
+			let stream = FolderContentMonitor.makeStream(url: tempDir)
+			let task = Task { for await _ in stream {} }
+			try await Task.sleep(for: .milliseconds(200))
+			task.cancel()
+			await task.value
+		}
+
+		try await Task.sleep(for: .milliseconds(500))
+	}
+
 	// MARK: - MulticastAsyncStream baseline
 
 	@Test func `MulticastAsyncStream deallocates after all streams end`() async throws {

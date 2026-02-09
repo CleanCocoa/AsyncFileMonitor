@@ -161,4 +161,31 @@ struct MulticastAsyncStreamTests {
 			}
 		}
 	}
+
+	@Test
+	func `rapid subscriber churn during send does not crash`() async throws {
+		let multicast = MulticastAsyncStream<Int>()
+		let iterations = 1000
+
+		await withTaskGroup(of: Void.self) { group in
+			group.addTask {
+				for i in 0..<iterations {
+					multicast.send(i)
+				}
+			}
+
+			for _ in 0..<200 {
+				group.addTask {
+					let task = Task { for await _ in multicast.makeStream() {} }
+					try? await Task.sleep(for: .microseconds(Int.random(in: 0...100)))
+					task.cancel()
+					await task.value
+				}
+			}
+		}
+
+		try await Task.sleep(for: .milliseconds(200))
+
+		#expect(multicast.currentStreamCount == 0)
+	}
 }
