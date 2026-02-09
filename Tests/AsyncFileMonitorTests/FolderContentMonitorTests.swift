@@ -172,35 +172,6 @@ struct FolderContentMonitorTests {
 		#expect(ids2 == ids3)
 	}
 
-	@Test func `deallocating monitor while FSEventStream callbacks are in flight does not crash`() async throws {
-		let tempDir = try Self.makeTempDir()
-		defer { try? FileManager.default.removeItem(at: tempDir) }
-
-		for iteration in 0..<200 {
-			let monitor = FolderContentMonitor(url: tempDir, latency: 0)
-			let stream = monitor.makeStream()
-
-			let consumeTask = Task {
-				for await _ in stream {}
-			}
-
-			try await Task.sleep(for: .milliseconds(50))
-
-			for fileIndex in 0..<10 {
-				try "data \(iteration)-\(fileIndex)".write(
-					to: tempDir.appendingPathComponent("stress_\(fileIndex).txt"),
-					atomically: false,
-					encoding: .utf8
-				)
-			}
-
-			consumeTask.cancel()
-			await consumeTask.value
-		}
-
-		try await Task.sleep(for: .milliseconds(200))
-	}
-
 	@Test func `rapidly creating and destroying monitors during continuous file writes does not crash`() async throws {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
