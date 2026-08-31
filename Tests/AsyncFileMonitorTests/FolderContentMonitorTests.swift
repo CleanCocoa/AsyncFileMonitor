@@ -113,6 +113,9 @@ struct FolderContentMonitorTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		let fileCount = 5
+		// Atomic writes emit events for `<name>.sb-xxxx` temp files too. Match the final
+		// names exactly so those intermediates cannot stand in for the files under test.
+		let expectedFilenames = Set((0..<fileCount).map { "independent_\($0).txt" })
 
 		let monitor1 = FolderContentMonitor(url: tempDir, latency: 0.1)
 		let monitor2 = FolderContentMonitor(url: tempDir, latency: 0.1)
@@ -124,16 +127,15 @@ struct FolderContentMonitorTests {
 
 		func collectCreationEvents(
 			from stream: AsyncStream<FolderContentChangeEvent>
-		) -> Task<[FolderContentChangeEvent], Never> {
+		) -> Task<Set<String>, Never> {
 			Task {
-				var collected: [FolderContentChangeEvent] = []
+				var collected: Set<String> = []
 				for await event in stream {
-					if event.eventPath.contains("independent_"),
+					guard expectedFilenames.contains(event.filename),
 						event.change.contains(.created) || event.change.contains(.renamed)
-					{
-						collected.append(event)
-						if collected.count >= fileCount { break }
-					}
+					else { continue }
+					collected.insert(event.filename)
+					if collected == expectedFilenames { break }
 				}
 				return collected
 			}
@@ -153,23 +155,19 @@ struct FolderContentMonitorTests {
 			)
 		}
 
-		let events1 = await task1.value
-		let events2 = await task2.value
-		let events3 = await task3.value
+		// Bound the wait: a monitor that never sees its files must fail, not hang.
+		try await Task.sleep(for: .milliseconds(1500))
+		task1.cancel()
+		task2.cancel()
+		task3.cancel()
 
-		for (label, events) in [("monitor1", events1), ("monitor2", events2), ("monitor3", events3)] {
-			#expect(events.count == fileCount, "\(label) should receive \(fileCount) events")
-			let filenames = Set(events.map(\.filename))
-			for i in 0..<fileCount {
-				#expect(filenames.contains("independent_\(i).txt"), "\(label) missing independent_\(i).txt")
-			}
+		let filenames1 = await task1.value
+		let filenames2 = await task2.value
+		let filenames3 = await task3.value
+
+		for (label, filenames) in [("monitor1", filenames1), ("monitor2", filenames2), ("monitor3", filenames3)] {
+			#expect(filenames == expectedFilenames, "\(label) missing \(expectedFilenames.subtracting(filenames))")
 		}
-
-		let ids1 = Set(events1.map(\.eventID))
-		let ids2 = Set(events2.map(\.eventID))
-		let ids3 = Set(events3.map(\.eventID))
-		#expect(ids1 == ids2)
-		#expect(ids2 == ids3)
 	}
 
 	@Test func `rapidly creating and destroying monitors during continuous file writes does not crash`() async throws {
