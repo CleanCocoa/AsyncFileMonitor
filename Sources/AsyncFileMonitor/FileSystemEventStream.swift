@@ -132,3 +132,20 @@ struct FileSystemEventStream: ~Copyable {
 		FSEventStreamRelease(streamRef)
 	}
 }
+
+/// Reference-typed holder that keeps a started ``FileSystemEventStream`` alive.
+///
+/// ``FileSystemEventStream`` is non-copyable and cannot be captured by an escaping closure
+/// directly. Boxing it hands the closure an ordinary reference to hold instead; the stream is
+/// stopped and released when the last reference to the box goes away.
+///
+/// - Warning: `deinit` runs on whichever thread releases the box, and `FSEventStreamStop`
+///   blocks until in-flight callbacks on the stream's dispatch queue have returned. Releasing
+///   the last reference from that queue — i.e. from inside an event handler — deadlocks.
+final class EventStreamBox: @unchecked Sendable {
+	private let eventStream: FileSystemEventStream
+
+	init(_ eventStream: consuming FileSystemEventStream) {
+		self.eventStream = eventStream
+	}
+}

@@ -203,8 +203,9 @@ nonisolated public final class FolderContentMonitor: Sendable {
 
 	/// Create an `AsyncStream` to monitor file system events.
 	///
-	/// This creates a new ``FolderContentMonitor`` instance and returns its first stream.
-	/// The monitor will be kept alive as long as the stream is active.
+	/// Each call creates its own `FSEventStream`, monitoring independently of every other stream.
+	/// Monitoring stops when the returned stream terminates: when the consumer breaks out of
+	/// iteration, cancels its task, or drops the stream without iterating.
 	///
 	/// - Parameters:
 	///   - url: The file or directory URL to monitor
@@ -222,8 +223,9 @@ nonisolated public final class FolderContentMonitor: Sendable {
 
 	/// Create an `AsyncStream` to monitor file system events.
 	///
-	/// This creates a new ``FolderContentMonitor`` instance and returns its first stream.
-	/// The monitor will be kept alive as long as the stream is active.
+	/// Each call creates its own `FSEventStream`, monitoring independently of every other stream.
+	/// Monitoring stops when the returned stream terminates: when the consumer breaks out of
+	/// iteration, cancels its task, or drops the stream without iterating.
 	///
 	/// - Parameters:
 	///   - paths: Array of file or directory paths to monitor
@@ -235,27 +237,27 @@ nonisolated public final class FolderContentMonitor: Sendable {
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
 	) -> AsyncStream<FolderContentChangeEvent> {
-		let monitor = FolderContentMonitor(
-			paths: paths,
-			sinceWhen: sinceWhen,
-			latency: latency
-		)
+		AsyncStream { continuation in
+			do {
+				let eventStream = try FileSystemEventStream.make(
+					paths: paths,
+					sinceWhen: sinceWhen,
+					latency: latency,
+					eventHandler: { event in
+						continuation.yield(event)
+					}
+				)
 
-		let innerStream = monitor.makeStream()
-		let (outerStream, outerContinuation) = AsyncStream<FolderContentChangeEvent>.makeStream()
-
-		let task = Task {
-			for await event in innerStream {
-				outerContinuation.yield(event)
+				// Capturing the box here is what keeps the FSEventStream running: it lives
+				// exactly as long as the termination handler, which `AsyncStream` releases
+				// once the stream terminates.
+				let box = EventStreamBox(eventStream)
+				continuation.onTermination = { _ in
+					withExtendedLifetime(box) {}
+				}
+			} catch {
+				continuation.finish()
 			}
-			outerContinuation.finish()
 		}
-
-		outerContinuation.onTermination = { _ in
-			task.cancel()
-			withExtendedLifetime(monitor) {}
-		}
-
-		return outerStream
 	}
 }
