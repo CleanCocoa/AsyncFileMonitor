@@ -113,13 +113,19 @@ Task {
 
 ## Architecture
 
-AsyncFileMonitor uses a direct AsyncStream architecture:
+AsyncFileMonitor uses a direct AsyncStream architecture. The static `makeStream` functions own one FSEventStream per stream:
 
 ```
-FSEventStream (C API) → C Callback → MulticastAsyncStream.send() → AsyncStream Continuations
+FSEventStream (C API) → C Callback → AsyncStream Continuation
 ```
 
-This direct flow avoids Swift concurrency Task scheduling that can cause event reordering.
+A ``FolderContentMonitor`` instance instead fans one FSEventStream out to every stream it has handed out:
+
+```
+FSEventStream (C API) → C Callback → broadcast → AsyncStream Continuations
+```
+
+Neither flow crosses a Task boundary, which is what would let Swift concurrency reorder events.
 
 ### Key Design Benefits
 
@@ -127,9 +133,9 @@ The direct AsyncStream architecture provides these benefits:
 
 **Consistent Event Ordering**: Events flow directly from FSEventStream callbacks to AsyncStream continuations without Task boundaries where reordering can occur.
 
-**Resource Sharing**: Multiple `AsyncStream` instances share a single FSEventStream through the MulticastAsyncStream broadcaster.
+**Resource Sharing**: Streams made from one ``FolderContentMonitor`` instance share a single FSEventStream.
 
-**Automatic Lifecycle Management**: FSEventStreams start when the first client connects and stop when the last disconnects.
+**Automatic Lifecycle Management**: A monitor's FSEventStream starts when its first stream is created and stops when the last one ends. A static stream's FSEventStream lives exactly as long as that stream.
 
 **Thread Safety**: Swift 6 Mutex provides synchronization without actor overhead.
 

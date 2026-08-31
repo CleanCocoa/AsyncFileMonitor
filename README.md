@@ -98,7 +98,7 @@ where event.change.contains(.isFile) && event.change.contains(.modified) {
 
 ### Multiple Concurrent Streams
 
-AsyncFileMonitor uses a multicast AsyncStream approach where multiple streams from the same monitor **share a single FSEventStream** and receive identical events in **registration order**:
+Each call to the static `makeStream` creates its own FSEventStream, so the streams below are fully **independent** — one ending does not affect the others. To have several streams **share a single FSEventStream** and receive identical events in **registration order**, create one `FolderContentMonitor` and call its `makeStream()` repeatedly:
 
 ```swift
 // Create multiple independent streams monitoring the same directory
