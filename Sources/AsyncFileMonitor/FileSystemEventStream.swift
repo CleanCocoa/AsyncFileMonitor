@@ -13,14 +13,6 @@
 import Foundation
 import Synchronization
 
-/// Errors that can occur during file system event stream operations.
-public enum FileSystemEventStreamError: Error {
-	/// `FSEventStreamCreate` can only fail with an invalid pointer, which is an irrecoverable situation.
-	case creationFailed
-	/// `FSEventStreamStart` "ought to always succeed" (see docs), but if it doesn't, it's recommended you scan directories recursively yourself.
-	case startFailed
-}
-
 /// Thread-safe RAII wrapper for `FSEventStream` lifecycle management.
 ///
 /// This class handles `FSEventStream` creation, configuration, and cleanup using
@@ -32,6 +24,14 @@ struct FileSystemEventStream: ~Copyable {
 	/// Only tests read this; it is the one observable proof that teardown reaches the kernel
 	/// stream rather than merely dropping the Swift wrapper.
 	static let liveCount = Atomic<Int>(0)
+
+	/// Errors that can occur while creating a file system event stream.
+	enum Error: Swift.Error {
+		/// `FSEventStreamCreate` can only fail with an invalid pointer, which is an irrecoverable situation.
+		case creationFailed
+		/// `FSEventStreamStart` "ought to always succeed" (see docs), but if it doesn't, it's recommended you scan directories recursively yourself.
+		case startFailed
+	}
 
 	/// Carries the event handler through the `FSEventStreamContext`, which can only hold an
 	/// opaque pointer.
@@ -82,7 +82,7 @@ struct FileSystemEventStream: ~Copyable {
 	///   - sinceWhen: FSEvent ID to start monitoring from
 	///   - latency: Event coalescing interval in seconds
 	///   - eventHandler: Sendable closure to handle events
-	/// - Throws: `FileSystemEventStreamError` if stream creation fails
+	/// - Throws: ``FileSystemEventStream/Error`` if stream creation or start fails
 	static func make(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId,
@@ -120,14 +120,14 @@ struct FileSystemEventStream: ~Copyable {
 				flags
 			)
 		else {
-			throw FileSystemEventStreamError.creationFailed
+			throw Error.creationFailed
 		}
 
 		FSEventStreamSetDispatchQueue(stream, queue)
 
 		guard FSEventStreamStart(stream) else {
 			FSEventStreamRelease(stream)
-			throw FileSystemEventStreamError.startFailed
+			throw Error.startFailed
 		}
 
 		liveCount.add(1, ordering: .relaxed)
