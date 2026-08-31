@@ -73,6 +73,28 @@ The last one is not merely simpler. Wrapping an inner stream in an outer one
 requires a task to pump events between them, and that task is exactly the
 `Task` boundary the direct path exists to avoid.
 
+## Stream configuration
+
+Two creation-time choices are load-bearing.
+
+```swift
+let flags = UInt32(
+	kFSEventStreamCreateFlagUseCFTypes    // paths arrive as a CFArray
+		| kFSEventStreamCreateFlagFileEvents  // file-level, not just directory-level
+)
+let queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
+```
+
+`kFSEventStreamCreateFlagUseCFTypes` is coupled to the callback: it is what
+makes `eventPaths` a `CFArray`, which the callback unwraps through
+`Unmanaged<CFArray>` and bridges to `[String]`. Drop the flag and that cast
+becomes wrong, silently.
+
+The queue's QoS decides how event delivery is prioritized against the rest of
+the process. `.userInteractive` suits a UI observing a folder the user is
+looking at; a background indexer would reasonably want lower. It is currently
+fixed rather than a parameter.
+
 ## Non-copyable values and escaping closures
 
 The bridge needs the FSEventStream to live as long as the `AsyncStream` and
