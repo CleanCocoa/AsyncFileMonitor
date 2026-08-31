@@ -19,7 +19,7 @@ import Synchronization
 ///
 /// These events are emitted to signal when the first stream is added
 /// or the last stream is removed, enabling automatic resource management.
-public enum StreamLifecycleEvent: Sendable {
+enum StreamLifecycleEvent: Sendable {
 	/// Emitted when the first stream is added to an empty multicast stream.
 	case firstStreamAdded
 
@@ -40,7 +40,7 @@ public enum StreamLifecycleEvent: Sendable {
 /// - **Thread-safe**: Swift 6 Mutex provides safe synchronization
 /// - **Lifecycle management**: Automatic start/stop based on subscriber count
 /// - **High performance**: No actor isolation or Task scheduling overhead
-public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
+final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	private struct State {
 		var continuations: OrderedDictionary<UUID, AsyncStream<T>.Continuation> = .init()
 		var lifecycleContinuation: AsyncStream<StreamLifecycleEvent>.Continuation?
@@ -48,14 +48,14 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 
 	private let state: Mutex<State>
 
-	public init() {
+	init() {
 		self.state = Mutex(State())
 	}
 
 	/// Create a stream that emits lifecycle events (first stream added, last stream removed).
 	///
 	/// - Returns: An `AsyncStream` of `StreamLifecycleEvent` values
-	public func makeLifecycleStream() -> AsyncStream<StreamLifecycleEvent> {
+	func makeLifecycleStream() -> AsyncStream<StreamLifecycleEvent> {
 		let (stream, continuation) = AsyncStream<StreamLifecycleEvent>.makeStream()
 		state.withLock { state in
 			state.lifecycleContinuation?.finish()
@@ -70,7 +70,7 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	/// the multicast when the stream terminates and emitting lifecycle events.
 	///
 	/// - Returns: An `AsyncStream` that will receive all broadcast elements
-	public func makeStream() -> AsyncStream<T> {
+	func makeStream() -> AsyncStream<T> {
 		let id = UUID()
 		let (stream, continuation) = AsyncStream<T>.makeStream()
 
@@ -103,7 +103,7 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	/// ensuring perfect event ordering.
 	///
 	/// - Parameter value: The element to broadcast to all active streams
-	public func send(_ value: T) {
+	func send(_ value: T) {
 		let currentContinuations = state.withLock { state in
 			Array(state.continuations.values)
 		}
@@ -130,7 +130,7 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 	/// Get the current number of active stream subscribers.
 	///
 	/// - Returns: The number of currently registered stream continuations
-	public var currentStreamCount: Int {
+	var currentStreamCount: Int {
 		state.withLock { $0.continuations.count }
 	}
 }

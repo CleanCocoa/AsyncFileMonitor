@@ -111,11 +111,6 @@ Task {
 - ``FolderContentChangeEvent``
 - ``Change``
 
-### Monitoring and Streams
-
-- ``StreamLifecycleEvent``
-- ``MulticastAsyncStream``
-
 ## Architecture
 
 AsyncFileMonitor uses a direct AsyncStream architecture:
