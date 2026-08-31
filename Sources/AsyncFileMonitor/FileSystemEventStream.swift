@@ -21,38 +21,6 @@ public enum FileSystemEventStreamError: Error {
 	case startFailed
 }
 
-/// Container for the event handler closure to pass through FSEventStream context.
-///
-/// This approach is cleaner than self-references because it avoids the complexity
-/// of Swift's initialization requirements when passing `self` to C callbacks.
-/// The box pattern allows clean separation between the RAII wrapper and the callback context.
-private final class EventHandlerBox: Sendable {
-	let handler: @Sendable (FolderContentChangeEvent) -> Void
-
-	init(handler: @escaping @Sendable (FolderContentChangeEvent) -> Void) {
-		self.handler = handler
-	}
-}
-
-/// Direct FSEventStream callback that forwards events to the provided handler.
-/// This eliminates Swift concurrency Task scheduling and prevents event reordering.
-private let directEventStreamCallback: FSEventStreamCallback = {
-	(stream, contextInfo, numEvents, eventPaths, eventFlags, eventIDs) in
-	guard let contextInfo else { return }
-	guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as NSArray as? [String] else {
-		return
-	}
-
-	let eventHandler = Unmanaged<EventHandlerBox>.fromOpaque(contextInfo)
-		.takeUnretainedValue().handler
-
-	for index in 0..<numEvents {
-		let change = Change(eventFlags: eventFlags[index])
-		let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
-		eventHandler(event)
-	}
-}
-
 /// Thread-safe RAII wrapper for `FSEventStream` lifecycle management.
 ///
 /// This class handles `FSEventStream` creation, configuration, and cleanup using
@@ -64,6 +32,38 @@ struct FileSystemEventStream: ~Copyable {
 	/// Only tests read this; it is the one observable proof that teardown reaches the kernel
 	/// stream rather than merely dropping the Swift wrapper.
 	static let liveCount = Atomic<Int>(0)
+
+	/// Carries the event handler through the `FSEventStreamContext`, which can only hold an
+	/// opaque pointer.
+	private final class EventHandlerBox: Sendable {
+		let handler: @Sendable (FolderContentChangeEvent) -> Void
+
+		init(handler: @escaping @Sendable (FolderContentChangeEvent) -> Void) {
+			self.handler = handler
+		}
+	}
+
+	/// Forwards events straight to the handler on the stream's dispatch queue.
+	///
+	/// Deliberately free of Task hops: scheduling here would let Swift concurrency reorder
+	/// events that FSEvents delivered in order.
+	private static let eventStreamCallback: FSEventStreamCallback = {
+		(stream, contextInfo, numEvents, eventPaths, eventFlags, eventIDs) in
+		guard let contextInfo else { return }
+		guard let paths = Unmanaged<CFArray>.fromOpaque(eventPaths).takeUnretainedValue() as NSArray as? [String]
+		else {
+			return
+		}
+
+		let eventHandler = Unmanaged<EventHandlerBox>.fromOpaque(contextInfo)
+			.takeUnretainedValue().handler
+
+		for index in 0..<numEvents {
+			let change = Change(eventFlags: eventFlags[index])
+			let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
+			eventHandler(event)
+		}
+	}
 
 	private let streamRef: FSEventStreamRef
 	private let queue: DispatchQueue
@@ -112,7 +112,7 @@ struct FileSystemEventStream: ~Copyable {
 		guard
 			let stream = FSEventStreamCreate(
 				kCFAllocatorDefault,
-				directEventStreamCallback,
+				eventStreamCallback,
 				&context,
 				paths as CFArray,
 				sinceWhen,
