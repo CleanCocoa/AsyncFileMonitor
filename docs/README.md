@@ -25,6 +25,14 @@ Detailed explanation of why events can still arrive out of order even WITH execu
 - Reordering happens in the Swift concurrency layer, not FSEventStream
 - Validates that executor preference is the right approach
 
+### [Bridging FSEventStream to AsyncStream.md](Bridging%20FSEventStream%20to%20AsyncStream.md)
+The constraints every FSEvents-to-`AsyncStream` bridge must satisfy, recorded as decisions already made:
+- The two stream shapes the library ships, and when each is the right one
+- The five pieces no bridge can drop, and what the single-subscriber shape leaves out
+- Holding a non-copyable stream in an escaping closure, and the deadlock invariant behind its `@unchecked Sendable`
+- The exact teardown sequence, including the asynchronous context release callback
+- FSEvents gotchas: blocking stop, failed start, file-level events, coalescing vs. atomicity
+
 ### [Quick Reference.md](Quick%20Reference.md)
 Quick reference guide for developers:
 - Critical code locations
