@@ -11,6 +11,7 @@
 //
 
 import Foundation
+import Synchronization
 
 /// Errors that can occur during file system event stream operations.
 public enum FileSystemEventStreamError: Error {
@@ -58,6 +59,12 @@ private let directEventStreamCallback: FSEventStreamCallback = {
 /// RAII principles. Events are forwarded to the provided handler closure.
 /// The FileSystemEventStream has exactly one "port" - the event handler closure.
 struct FileSystemEventStream: ~Copyable {
+	/// Number of `FSEventStream`s that have started and not yet been released.
+	///
+	/// Only tests read this; it is the one observable proof that teardown reaches the kernel
+	/// stream rather than merely dropping the Swift wrapper.
+	static let liveCount = Atomic<Int>(0)
+
 	private let streamRef: FSEventStreamRef
 	private let queue: DispatchQueue
 	private let eventHandlerBox: EventHandlerBox
@@ -123,10 +130,12 @@ struct FileSystemEventStream: ~Copyable {
 			throw FileSystemEventStreamError.startFailed
 		}
 
+		liveCount.add(1, ordering: .relaxed)
 		return FileSystemEventStream(streamRef: stream, queue: queue, eventHandlerBox: eventHandlerBox)
 	}
 
 	deinit {
+		FileSystemEventStream.liveCount.subtract(1, ordering: .relaxed)
 		FSEventStreamStop(streamRef)
 		FSEventStreamInvalidate(streamRef)
 		FSEventStreamRelease(streamRef)
