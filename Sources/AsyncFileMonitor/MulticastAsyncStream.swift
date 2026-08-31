@@ -113,6 +113,20 @@ public final class MulticastAsyncStream<T>: Sendable where T: Sendable {
 		}
 	}
 
+	/// End every registered stream, so each consumer's `for await` loop exits.
+	///
+	/// Continuations are finished outside the lock: finishing one runs its termination handler,
+	/// which takes the same lock to deregister itself.
+	func finishAll() {
+		let currentContinuations = state.withLock { state in
+			Array(state.continuations.values)
+		}
+
+		for continuation in currentContinuations {
+			continuation.finish()
+		}
+	}
+
 	/// Get the current number of active stream subscribers.
 	///
 	/// - Returns: The number of currently registered stream continuations

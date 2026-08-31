@@ -173,6 +173,8 @@ nonisolated public final class FolderContentMonitor: Sendable {
 				} catch {
 					state = .awaitingSubscribers(lifecycleTask: task)
 					print("Failed to create FileSystemEventStream: \(error)")
+					// Without this, subscribers hold a stream that never yields and never ends.
+					multicastStream.finishAll()
 				}
 			case .idle:
 				state = .idle
@@ -193,8 +195,9 @@ nonisolated public final class FolderContentMonitor: Sendable {
 				state = .idle
 				assertionFailure("stop() called in unexpected state")
 			case .awaitingSubscribers(let task):
+				// Reached when start() failed and finished the streams: the last subscriber
+				// goes away while no FSEventStream is running.
 				state = .awaitingSubscribers(lifecycleTask: task)
-				assertionFailure("stop() called in unexpected state")
 			}
 		}
 	}
@@ -256,6 +259,7 @@ nonisolated public final class FolderContentMonitor: Sendable {
 					withExtendedLifetime(box) {}
 				}
 			} catch {
+				print("Failed to create FileSystemEventStream: \(error)")
 				continuation.finish()
 			}
 		}
