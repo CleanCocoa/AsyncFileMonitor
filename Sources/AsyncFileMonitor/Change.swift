@@ -25,11 +25,13 @@ public struct Change: OptionSet, Sendable {
 		self.rawValue = rawValue
 	}
 
-	/// Creates a new ``Change`` instance from Core Services event flags.
+	/// Extracts the item flags from Core Services event flags, discarding stream conditions.
 	///
-	/// - Parameter eventFlags: The `FSEventStreamEventFlags` to convert.
+	/// The low byte of `FSEventStreamEventFlags` describes the stream rather than the item at
+	/// `eventPath`; see ``StreamCondition``. Masking it off is what lets an empty ``Change``
+	/// mean "this element reports no file change".
 	public init(eventFlags: FSEventStreamEventFlags) {
-		self.rawValue = Int(eventFlags)
+		self.rawValue = Int(eventFlags) & ~StreamCondition.flagsMask
 	}
 
 	/// The changed item is a directory.
@@ -70,6 +72,14 @@ public struct Change: OptionSet, Sendable {
 
 	/// The item's extended attributes were modified.
 	public static let xattrsModified = Change(rawValue: kFSEventStreamEventFlagItemXattrMod)
+
+	/// The item was cloned, e.g. by `clonefile(2)` or duplicating in Finder.
+	public static let cloned = Change(rawValue: kFSEventStreamEventFlagItemCloned)
+
+	/// The change was caused by this process.
+	///
+	/// Useful to suppress reacting to your own writes.
+	public static let ownEvent = Change(rawValue: kFSEventStreamEventFlagOwnEvent)
 }
 
 extension Change: Hashable {
@@ -104,6 +114,8 @@ extension Change: CustomStringConvertible {
 		if self.contains(.finderInfoModified) { names.append("finderInfoModified") }
 		if self.contains(.inodeMetaModified) { names.append("inodeMetaModified") }
 		if self.contains(.xattrsModified) { names.append("xattrsModified") }
+		if self.contains(.cloned) { names.append("cloned") }
+		if self.contains(.ownEvent) { names.append("ownEvent") }
 
 		return names.joined(separator: ", ")
 	}

@@ -110,6 +110,7 @@ Task {
 - ``FolderContentMonitor``
 - ``FolderContentChangeEvent``
 - ``Change``
+- ``StreamCondition``
 
 ## Architecture
 

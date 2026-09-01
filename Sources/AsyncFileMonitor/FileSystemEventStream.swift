@@ -59,8 +59,13 @@ struct FileSystemEventStream: ~Copyable {
 			.takeUnretainedValue().handler
 
 		for index in 0..<numEvents {
-			let change = Change(eventFlags: eventFlags[index])
-			let event = FolderContentChangeEvent(eventID: eventIDs[index], eventPath: paths[index], change: change)
+			let flags = eventFlags[index]
+			let event = FolderContentChangeEvent(
+				eventID: eventIDs[index],
+				eventPath: paths[index],
+				change: Change(eventFlags: flags),
+				condition: StreamCondition(eventFlags: flags)
+			)
 			eventHandler(event)
 		}
 	}
