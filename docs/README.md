@@ -33,6 +33,13 @@ The constraints every FSEvents-to-`AsyncStream` bridge must satisfy, recorded as
 - The exact teardown sequence, including the asynchronous context release callback
 - FSEvents gotchas: blocking stop, failed start, file-level events, coalescing vs. atomicity
 
+### [FSEvents Flag Reference.md](FSEvents%20Flag%20Reference.md)
+Every `FSEventStreamEventFlags` bit, grouped by what it obliges a consumer to do:
+- The low-byte/high-bits partition that `StreamCondition` and `Change` mirror
+- Lost events, invalidated state, and the `HistoryDone` sentinel
+- Why the event carries both a change and a condition rather than being a sum type
+- Why `RootChanged` cannot fire without `kFSEventStreamCreateFlagWatchRoot`
+
 ### [Quick Reference.md](Quick%20Reference.md)
 Quick reference guide for developers:
 - Critical code locations
