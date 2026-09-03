@@ -27,7 +27,7 @@ Detailed explanation of why events can still arrive out of order even WITH execu
 
 ### [Bridging FSEventStream to AsyncStream.md](Bridging%20FSEventStream%20to%20AsyncStream.md)
 The constraints every FSEvents-to-`AsyncStream` bridge must satisfy, recorded as decisions already made:
-- The two stream shapes the library ships, and when each is the right one
+- Why one FSEventStream per stream, and what the multicast shape cost before 3.0 removed it
 - The five pieces no bridge can drop, and what the single-subscriber shape leaves out
 - Holding a non-copyable stream in an escaping closure, and the deadlock invariant behind its `@unchecked Sendable`
 - The exact teardown sequence, including the asynchronous context release callback

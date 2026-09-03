@@ -68,20 +68,12 @@ for await event in eventStream {
 
 ### Multiple Concurrent Streams
 
-Multiple streams from the same monitor share a single FSEventStream and receive identical events in registration order:
+Each stream owns its own FSEventStream and is fully independent: one ending does not affect the others, and each coalesces events on its own. Event IDs and batch boundaries can therefore differ between streams watching the same path.
 
 ```swift
-let monitor = FolderContentMonitor(url: documentsURL)
-
-// Create streams in specific order
-let uiUpdateStream = monitor.makeStream()
-let backupStream = monitor.makeStream()  
-let logStream = monitor.makeStream()
-
-// Events are delivered in registration order:
-// 1. uiUpdateStream receives event first
-// 2. backupStream receives event second
-// 3. logStream receives event third
+let uiUpdateStream = FolderContentMonitor.makeStream(url: documentsURL)
+let backupStream = FolderContentMonitor.makeStream(url: documentsURL)
+let logStream = FolderContentMonitor.makeStream(url: documentsURL)
 
 Task {
     for await event in uiUpdateStream {
@@ -114,19 +106,13 @@ Task {
 
 ## Architecture
 
-AsyncFileMonitor uses a direct AsyncStream architecture. The static `makeStream` functions own one FSEventStream per stream:
+AsyncFileMonitor uses a direct AsyncStream architecture. Each stream owns one FSEventStream:
 
 ```
 FSEventStream (C API) → C Callback → AsyncStream Continuation
 ```
 
-A ``FolderContentMonitor`` instance instead fans one FSEventStream out to every stream it has handed out:
-
-```
-FSEventStream (C API) → C Callback → broadcast → AsyncStream Continuations
-```
-
-Neither flow crosses a Task boundary, which is what would let Swift concurrency reorder events.
+The flow never crosses a Task boundary, which is what would let Swift concurrency reorder events.
 
 ### Key Design Benefits
 
@@ -134,12 +120,6 @@ The direct AsyncStream architecture provides these benefits:
 
 **Consistent Event Ordering**: Events flow directly from FSEventStream callbacks to AsyncStream continuations without Task boundaries where reordering can occur.
 
-**Resource Sharing**: Streams made from one ``FolderContentMonitor`` instance share a single FSEventStream.
-
-**Automatic Lifecycle Management**: A monitor's FSEventStream starts when its first stream is created and stops when the last one ends. A static stream's FSEventStream lives exactly as long as that stream.
-
-**Thread Safety**: Swift 6 Mutex provides synchronization without actor overhead.
-
-**Ordered Subscribers**: OrderedDictionary preserves subscriber registration order for deterministic event delivery.
+**Automatic Lifecycle Management**: An FSEventStream is created synchronously when the factory returns and released when the stream terminates — whether the consumer breaks, cancels, or drops it without iterating.
 
 **Reduced Overhead**: Avoids actor isolation and Task scheduling overhead compared to approaches that use Swift concurrency primitives.

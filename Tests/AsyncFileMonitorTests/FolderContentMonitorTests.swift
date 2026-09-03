@@ -16,11 +16,9 @@ struct FolderContentMonitorTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
-		let monitor = FolderContentMonitor(url: tempDir)
-
 		var tasks: [Task<Void, Never>] = []
 		for _ in 0..<100 {
-			tasks.append(Task { for await _ in monitor.makeStream() {} })
+			tasks.append(Task { for await _ in FolderContentMonitor.makeStream(url: tempDir) {} })
 		}
 
 		try await Task.sleep(for: .milliseconds(100))
@@ -108,7 +106,7 @@ struct FolderContentMonitorTests {
 		try await Task.sleep(for: .milliseconds(200))
 	}
 
-	@Test func `independent monitors on the same path all receive events without interference`() async throws {
+	@Test func `independent streams on the same path all receive events without interference`() async throws {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -117,13 +115,9 @@ struct FolderContentMonitorTests {
 		// names exactly so those intermediates cannot stand in for the files under test.
 		let expectedFilenames = Set((0..<fileCount).map { "independent_\($0).txt" })
 
-		let monitor1 = FolderContentMonitor(url: tempDir, latency: 0.1)
-		let monitor2 = FolderContentMonitor(url: tempDir, latency: 0.1)
-		let monitor3 = FolderContentMonitor(url: tempDir, latency: 0.1)
-
-		let stream1 = monitor1.makeStream()
-		let stream2 = monitor2.makeStream()
-		let stream3 = monitor3.makeStream()
+		let stream1 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let stream2 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let stream3 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
 
 		func collectCreationEvents(
 			from stream: AsyncStream<FolderContentChangeEvent>
@@ -165,12 +159,12 @@ struct FolderContentMonitorTests {
 		let filenames2 = await task2.value
 		let filenames3 = await task3.value
 
-		for (label, filenames) in [("monitor1", filenames1), ("monitor2", filenames2), ("monitor3", filenames3)] {
+		for (label, filenames) in [("stream1", filenames1), ("stream2", filenames2), ("stream3", filenames3)] {
 			#expect(filenames == expectedFilenames, "\(label) missing \(expectedFilenames.subtracting(filenames))")
 		}
 	}
 
-	@Test func `rapidly creating and destroying monitors during continuous file writes does not crash`() async throws {
+	@Test func `rapidly creating and destroying streams during continuous file writes does not crash`() async throws {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
@@ -188,8 +182,7 @@ struct FolderContentMonitorTests {
 		}
 
 		for _ in 0..<500 {
-			let monitor = FolderContentMonitor(url: tempDir, latency: 0)
-			let stream = monitor.makeStream()
+			let stream = FolderContentMonitor.makeStream(url: tempDir, latency: 0)
 			let task = Task { for await _ in stream {} }
 			try await Task.sleep(for: .milliseconds(5))
 			task.cancel()

@@ -3,28 +3,36 @@
 *Document ID: 20260831T124622*
 *Date: 2026-08-31*
 
-The constraints that shape every FSEvents-to-`AsyncStream` bridge, and the two
-shapes this library ships. Written as a record of decisions already made, so a
-future bridge — here or elsewhere — does not rediscover them.
+The constraints that shape every FSEvents-to-`AsyncStream` bridge. Written as a
+record of decisions already made, so a future bridge — here or elsewhere — does
+not rediscover them.
 
-## Two shapes
+## One shape
 
-The library exposes the same events through two arrangements, and the choice
-between them is about FSEventStream ownership, not about the API surface.
+Every stream owns its own `FSEventStream`, created synchronously by the factory and released
+when the stream terminates. Independent streams are what callers actually want, and it is the
+smaller mechanism.
 
-| | `FolderContentMonitor.makeStream(url:)` (static) | `FolderContentMonitor(url:).makeStream()` (instance) |
-|---|---|---|
-| FSEventStreams | One per returned stream | One, shared by every stream the instance hands out |
-| Subscribers | Exactly one | Many, in registration order |
-| Lifetime | Tied to the returned stream | Starts at the first stream, stops after the last |
-| Machinery | `AsyncStream` + one RAII wrapper | Adds a multicast registry, a `Mutex` state machine, a lifecycle task |
+Through 2.x a second shape existed: a `FolderContentMonitor` *instance* fanned one kernel
+stream out to every subscriber it had handed out, so several consumers saw identical event IDs
+in identical order. It was deleted in 3.0 because nothing used it that way — the sole consumer
+called `makeStream()` once per instance — and because it made every feature cost twice.
 
-Prefer the static form. It is the smaller mechanism, and independent streams
-are what most callers actually want. Reach for an instance only when several
-consumers must observe *identical* events — the same event IDs, in the same
-order — from a single kernel stream.
+Two properties were lost with it, both worth knowing before anyone reintroduces multicast:
 
-## What both shapes must do
+- **Startup became synchronous.** The instance path created its `FSEventStream` inside a
+  lifecycle `Task` on first-subscriber, so monitoring began some time after the caller
+  returned. Anything reconciling events against a baseline captured at construction had a
+  window it could not close.
+- **A throwing factory became possible.** With creation back inside the caller's frame, a
+  failure at create or start has somewhere to go. On the instance path the caller was long
+  gone by the time `make` ran.
+
+Note that the deleted shape gave one stream per *monitor instance*, not one per path — two
+instances watching the same folder still opened two kernel streams. Deduplicating per path
+across a process is a different feature, tracked separately.
+
+## What the bridge must do
 
 These five are not stylistic. Drop any one and the bridge is either unsound or
 misordered.
@@ -55,10 +63,10 @@ boundary. See [FSEventStream Ordering Findings.md](FSEventStream%20Ordering%20Fi
 consumer's async context, so `FolderContentChangeEvent` and `Change` are
 value types all the way down.
 
-## What the single-subscriber shape leaves out
+## What multicast cost
 
-Everything below exists to serve multiple subscribers. With one consumer per
-stream, each is cost without benefit.
+Everything below existed to serve multiple subscribers, and went away with them in 3.0.
+Recorded so that reintroducing multicast starts from an accurate price list.
 
 | Component | Why it is unnecessary |
 |---|---|
@@ -71,7 +79,9 @@ stream, each is cost without benefit.
 
 The last one is not merely simpler. Wrapping an inner stream in an outer one
 requires a task to pump events between them, and that task is exactly the
-`Task` boundary the direct path exists to avoid.
+`Task` boundary the direct path exists to avoid. The same argument governs
+batched versus per-event delivery: both are built at the source, in the
+handler closure, rather than by adapting one stream into the other.
 
 ## Stream configuration
 

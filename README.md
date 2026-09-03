@@ -98,7 +98,7 @@ where event.change.contains(.isFile) && event.change.contains(.modified) {
 
 ### Multiple Concurrent Streams
 
-Each call to the static `makeStream` creates its own FSEventStream, so the streams below are fully **independent** — one ending does not affect the others. To have several streams **share a single FSEventStream** and receive identical events in **registration order**, create one `FolderContentMonitor` and call its `makeStream()` repeatedly:
+Each call to `makeStream` creates its own FSEventStream, so the streams below are fully **independent**: one ending does not affect the others, and each coalesces events on its own.
 
 ```swift
 // Create multiple independent streams monitoring the same directory
@@ -127,13 +127,9 @@ Task {
 }
 ```
 
-**Ordering Guarantee**: Events are delivered to subscribers in registration order. In the example above, for each file system event:
+**Ordering**: Within one stream, events arrive in the order FSEvents produced them — the callback yields straight to the continuation, with no Task boundary where Swift concurrency could reorder them.
 
-1. `uiUpdateStream` receives the event first
-2. `backupStream` receives the event second
-3. `logStream` receives the event third
-
-You should probably not rely on the kind of things like subscription order, but I figured it's better you know just in case that you run into concurrency-related issues in your app, than having to guess.
+Across streams there is no such relationship. Each owns its own FSEventStream, so the same file change can carry different event IDs and land on different coalescing boundaries in each. Do not line up one stream's events against another's.
 
 ## Event Types
 

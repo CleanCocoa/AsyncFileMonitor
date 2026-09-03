@@ -14,13 +14,7 @@ let package = Package(
 		.package(url: "https://github.com/apple/swift-docc-plugin", from: "1.0.0"),
 	],
 	targets: [
-		.target(
-			name: "AsyncFileMonitor",
-			dependencies: [
-				.product(name: "OrderedCollections", package: "swift-collections")
-			],
-			exclude: []
-		),
+		.target(name: "AsyncFileMonitor"),
 		.executableTarget(
 			name: "watch",
 			dependencies: ["AsyncFileMonitor"],
@@ -32,7 +26,10 @@ let package = Package(
 		),
 		.testTarget(
 			name: "RaceConditionTests",
-			dependencies: ["AsyncFileMonitor"],
+			dependencies: [
+				"AsyncFileMonitor",
+				.product(name: "OrderedCollections", package: "swift-collections"),
+			],
 			path: "Tests/RaceConditionTests",
 			exclude: ["README.md"]
 		),

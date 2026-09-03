@@ -109,23 +109,4 @@ struct StreamTeardownTests {
 
 		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
 	}
-
-	// MARK: - Instance API
-
-	@Test func `instance makeStream releases the FSEventStream when its last stream ends`() async throws {
-		let tempDir = try Self.makeTempDir()
-		defer { try? FileManager.default.removeItem(at: tempDir) }
-
-		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
-		do {
-			let monitor = FolderContentMonitor(url: tempDir)
-			let stream = monitor.makeStream()
-			let task = Task { for await _ in stream {} }
-			try await Task.sleep(for: .milliseconds(100))
-			task.cancel()
-			await task.value
-		}
-
-		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
-	}
 }

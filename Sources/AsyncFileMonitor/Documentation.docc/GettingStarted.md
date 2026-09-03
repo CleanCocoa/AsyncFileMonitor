@@ -124,16 +124,13 @@ for await event in stream {
 
 ## Advanced Configuration
 
-For fine-tuned control, use ``FolderContentMonitor`` directly:
+For fine-tuned control, pass the optional parameters:
 
 ```swift
-let monitor = FolderContentMonitor(
+let stream = FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
-    latency: 0.5,  // Wait 0.5 seconds to coalesce events
-    qos: .userInitiated  // Quality of service level
+    latency: 0.5  // Wait 0.5 seconds to coalesce events
 )
-
-let stream = await monitor.makeStream()
 
 for await event in stream {
     // Handle events with custom configuration
