@@ -58,7 +58,7 @@ import AsyncFileMonitor
 // Create a stream with custom configuration
 let eventStream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
-    latency: 0.5  // Coalesce rapid changes
+    configuration: .init(latency: 0.5)  // Coalesce rapid changes
 )
 
 // Process file events
@@ -153,7 +153,7 @@ Across streams there is no such relationship. Each owns its own FSEventStream, s
 FSEvents groups related changes into one callback: an atomic save arrives as a single batch naming the temporary file, the final file, and the metadata changes the OS made along the way. `makeStream` flattens that grouping; `makeBatchedStream` preserves it.
 
 ```swift
-for await batch in try FolderContentMonitor.makeBatchedStream(url: documentsURL, latency: 0.3) {
+for await batch in try FolderContentMonitor.makeBatchedStream(url: documentsURL, configuration: .init(latency: 0.3)) {
     // One coalesced group of changes — e.g. all the events of a single save
     await reconcile(batch)
 }
@@ -189,10 +189,10 @@ Control event coalescing with the `latency` parameter:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let eventStream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let eventStream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 0.0))
 
 // 1-second latency - coalesces rapid changes
-let eventStream = try FolderContentMonitor.makeStream(url: url, latency: 1.0)
+let eventStream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 1.0))
 ```
 
 A latency of 0.0 can produce too much noise when applications make multiple rapid changes to files. Experiment with slightly higher values (e.g., 0.1-1.0 seconds) to reduce noise.
@@ -223,7 +223,7 @@ Add AsyncFileMonitor to your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/yourusername/AsyncFileMonitor.git", from: "2.0.0")
+    .package(url: "https://github.com/CleanCocoa/AsyncFileMonitor.git", from: "3.0.0")
 ]
 ```
 

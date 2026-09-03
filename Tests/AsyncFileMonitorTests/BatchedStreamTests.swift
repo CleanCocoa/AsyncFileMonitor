@@ -30,7 +30,7 @@ struct BatchedStreamTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
-		let stream = try FolderContentMonitor.makeBatchedStream(url: tempDir, latency: 0.1)
+		let stream = try FolderContentMonitor.makeBatchedStream(url: tempDir, configuration: .init(latency: 0.1))
 		let task = Self.collect(from: stream, until: "batched.txt")
 
 		try await Task.sleep(for: .milliseconds(200))
@@ -55,7 +55,7 @@ struct BatchedStreamTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
-		let stream = try FolderContentMonitor.makeBatchedStream(url: tempDir, latency: 0.3)
+		let stream = try FolderContentMonitor.makeBatchedStream(url: tempDir, configuration: .init(latency: 0.3))
 		let task = Self.collect(from: stream, until: "atomic.txt")
 
 		try await Task.sleep(for: .milliseconds(200))

@@ -92,14 +92,12 @@ struct FileSystemEventStream: ~Copyable {
 	///
 	/// - Parameters:
 	///   - paths: File system paths to monitor
-	///   - sinceWhen: FSEvent ID to start monitoring from
-	///   - latency: Event coalescing interval in seconds
+	///   - configuration: How the stream is set up
 	///   - eventHandler: Sendable closure receiving one FSEvents callback's worth of events
 	/// - Throws: ``FileSystemEventStream/Error`` if stream creation or start fails
 	static func make(
 		paths: [String],
-		sinceWhen: FSEventStreamEventId,
-		latency: CFTimeInterval,
+		configuration: FolderContentMonitor.Configuration,
 		eventHandler: @escaping @Sendable ([FolderContentChangeEvent]) -> Void
 	) throws(FileSystemEventStream.Error) -> FileSystemEventStream {
 		let queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
@@ -128,8 +126,8 @@ struct FileSystemEventStream: ~Copyable {
 				eventStreamCallback,
 				&context,
 				paths as CFArray,
-				sinceWhen,
-				latency,
+				configuration.sinceWhen,
+				configuration.latency,
 				flags
 			)
 		else {

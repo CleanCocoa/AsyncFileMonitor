@@ -129,7 +129,7 @@ For fine-tuned control, pass the optional parameters:
 ```swift
 let stream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
-    latency: 0.5  // Wait 0.5 seconds to coalesce events
+    configuration: .init(latency: 0.5)  // Wait 0.5 seconds to coalesce events
 )
 
 for await event in stream {
@@ -144,10 +144,10 @@ Control event coalescing to reduce noise:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let stream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 0.0))
 
 // 1-second latency - coalesces rapid changes
-let stream = try FolderContentMonitor.makeStream(url: url, latency: 1.0)
+let stream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 1.0))
 ```
 
 ## Error Handling

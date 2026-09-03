@@ -43,8 +43,7 @@ struct StreamTeardownTests {
 			weakSentinel = sentinel
 			let eventStream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
-				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-				latency: 0,
+				configuration: .init(),
 				eventHandler: { _ in withExtendedLifetime(sentinel) {} }
 			)
 			#expect(weakSentinel != nil)

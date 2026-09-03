@@ -197,10 +197,10 @@ Use the `latency` parameter to reduce event noise:
 
 ```swift
 // High-frequency monitoring (noisy)
-let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let stream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 0.0))
 
 // Coalesced monitoring (cleaner)
-let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.5)
+let stream = try FolderContentMonitor.makeStream(url: url, configuration: .init(latency: 0.5))
 ```
 
 Higher latency values reduce the number of events but increase the delay between the actual change and notification.

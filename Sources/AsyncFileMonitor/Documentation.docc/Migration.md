@@ -232,7 +232,7 @@ monitor.rx.folderContentChange
 ### Debouncing (AsyncFileMonitor)
 
 ```swift
-let stream = try FolderContentMonitor.makeStream(url: folderUrl, latency: 0.5)
+let stream = try FolderContentMonitor.makeStream(url: folderUrl, configuration: .init(latency: 0.5))
 
 for await event in stream {
     // Events are automatically coalesced by FSEvents

@@ -1,6 +1,6 @@
 Pod::Spec.new do |s|
   s.name             = 'AsyncFileMonitor'
-  s.version          = '2.1.0'
+  s.version          = '3.0.0'
   s.summary          = "Modern async/await Swift Package for monitoring file system events using CoreFoundation's FSEvents API."
   s.description      = <<-DESC
                        AsyncFileMonitor is the modernized successor to RxFileMonitor, providing powerful file monitoring capabilities with Swift 6 concurrency support and zero external dependencies.

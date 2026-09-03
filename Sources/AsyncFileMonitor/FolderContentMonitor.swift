@@ -60,11 +60,10 @@ public enum FolderContentMonitor {
 	///   - latency: Event coalescing interval in seconds (default: `0`)
 	public static func makeStream(
 		url: URL,
-		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-		latency: CFTimeInterval = 0
+		configuration: Configuration = Configuration()
 	) throws(Error) -> AsyncStream<FolderContentChangeEvent> {
 		precondition(url.isFileURL)
-		return try makeStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
+		return try makeStream(paths: [url.path], configuration: configuration)
 	}
 
 	/// Create an `AsyncStream` to monitor file system events.
@@ -75,10 +74,9 @@ public enum FolderContentMonitor {
 	///   - latency: Event coalescing interval in seconds (default: `0`)
 	public static func makeStream(
 		paths: [String],
-		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-		latency: CFTimeInterval = 0
+		configuration: Configuration = Configuration()
 	) throws(Error) -> AsyncStream<FolderContentChangeEvent> {
-		try makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
+		try makeStream(paths: paths, configuration: configuration) { batch, continuation in
 			for event in batch { continuation.yield(event) }
 		}
 	}
@@ -100,11 +98,10 @@ public enum FolderContentMonitor {
 	///   - latency: Event coalescing interval in seconds (default: `0`)
 	public static func makeBatchedStream(
 		url: URL,
-		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-		latency: CFTimeInterval = 0
+		configuration: Configuration = Configuration()
 	) throws(Error) -> AsyncStream<[FolderContentChangeEvent]> {
 		precondition(url.isFileURL)
-		return try makeBatchedStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
+		return try makeBatchedStream(paths: [url.path], configuration: configuration)
 	}
 
 	/// Create an `AsyncStream` delivering one FSEvents callback's worth of events at a time.
@@ -118,10 +115,9 @@ public enum FolderContentMonitor {
 	///   - latency: Event coalescing interval in seconds (default: `0`)
 	public static func makeBatchedStream(
 		paths: [String],
-		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-		latency: CFTimeInterval = 0
+		configuration: Configuration = Configuration()
 	) throws(Error) -> AsyncStream<[FolderContentChangeEvent]> {
-		try makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
+		try makeStream(paths: paths, configuration: configuration) { batch, continuation in
 			continuation.yield(batch)
 		}
 	}
@@ -133,16 +129,14 @@ public enum FolderContentMonitor {
 	/// concurrency could reorder events FSEvents delivered in order.
 	private static func makeStream<Element: Sendable>(
 		paths: [String],
-		sinceWhen: FSEventStreamEventId,
-		latency: CFTimeInterval,
+		configuration: Configuration,
 		deliver: @escaping @Sendable ([FolderContentChangeEvent], AsyncStream<Element>.Continuation) -> Void
 	) throws(Error) -> AsyncStream<Element> {
 		let (stream, continuation) = AsyncStream<Element>.makeStream()
 		do {
 			let eventStream = try FileSystemEventStream.make(
 				paths: paths,
-				sinceWhen: sinceWhen,
-				latency: latency,
+				configuration: configuration,
 				eventHandler: { batch in deliver(batch, continuation) }
 			)
 

@@ -51,7 +51,7 @@ for await event in eventStream {
 // Create a stream with custom configuration
 let eventStream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
-    latency: 0.5  // Coalesce rapid changes
+    configuration: .init(latency: 0.5)  // Coalesce rapid changes
 )
 
 // Process file events with filtering
@@ -103,6 +103,11 @@ Task {
 - ``FolderContentChangeEvent``
 - ``Change``
 - ``StreamCondition``
+
+### Configuration
+
+- ``FolderContentMonitor/Configuration``
+- ``FolderContentMonitor/Error``
 
 ## Architecture
 

@@ -19,8 +19,7 @@ struct FileSystemEventStreamTests {
 		try await confirmation(expectedCount: 1) { confirmation in
 			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
-				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-				latency: 0.1
+				configuration: .init(latency: 0.1)
 			) { batch in
 				for event in batch where event.eventPath.hasSuffix("test.txt") {
 					confirmation()
@@ -47,8 +46,7 @@ struct FileSystemEventStreamTests {
 		for iteration in 0..<50 {
 			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
-				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-				latency: 0.01
+				configuration: .init(latency: 0.01)
 			) { batch in
 				_ = batch
 			}
@@ -76,8 +74,7 @@ struct FileSystemEventStreamTests {
 		for iteration in 0..<100 {
 			_ = try FileSystemEventStream.make(
 				paths: [tempDir.path],
-				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-				latency: 0.01
+				configuration: .init(latency: 0.01)
 			) { batch in
 				_ = batch
 			}
@@ -101,8 +98,7 @@ struct FileSystemEventStreamTests {
 
 			let stream = try FileSystemEventStream.make(
 				paths: [tempDir.path],
-				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
-				latency: 0.1
+				configuration: .init(latency: 0.1)
 			) { batch in
 				for event in batch {
 					let filename = URL(fileURLWithPath: event.eventPath).lastPathComponent

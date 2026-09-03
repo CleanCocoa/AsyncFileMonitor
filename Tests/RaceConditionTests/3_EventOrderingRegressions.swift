@@ -69,7 +69,7 @@ func demonstrateCorrectBehavior() async throws {
 	let fileCount = 25
 	let collector = EventIDCollector(maxCount: fileCount)
 	let monitorTask = Task {
-		let eventStream = try FolderContentMonitor.makeStream(url: tempDir, latency: 0.15)
+		let eventStream = try FolderContentMonitor.makeStream(url: tempDir, configuration: .init(latency: 0.15))
 		for await event in eventStream {
 			let filename = URL(fileURLWithPath: event.eventPath).lastPathComponent
 			if filename.hasPrefix("baseline_") && filename.hasSuffix(".txt") {
@@ -135,7 +135,7 @@ func highStressOrderingTest() async throws {
 
 	// Use shorter latency for more aggressive testing
 	let monitorTask = Task {
-		let eventStream = try FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let eventStream = try FolderContentMonitor.makeStream(url: tempDir, configuration: .init(latency: 0.1))
 		for await event in eventStream {
 			let filename = URL(fileURLWithPath: event.eventPath).lastPathComponent
 			if filename.hasPrefix("stress_") && filename.hasSuffix(".txt") {
