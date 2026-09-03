@@ -120,4 +120,50 @@ struct StreamTeardownTests {
 
 		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
 	}
+
+	// MARK: - Batched factory
+
+	@Test func `makeBatchedStream releases the FSEventStream when dropped without iteration`() async throws {
+		let tempDir = try Self.makeTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+
+		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
+		do {
+			_ = try FolderContentMonitor.makeBatchedStream(url: tempDir)
+		}
+
+		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
+	}
+
+	@Test func `makeBatchedStream releases the FSEventStream when the consumer is cancelled`() async throws {
+		let tempDir = try Self.makeTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+
+		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
+		do {
+			let stream = try FolderContentMonitor.makeBatchedStream(url: tempDir)
+			let task = Task { for await _ in stream {} }
+			try await Task.sleep(for: .milliseconds(100))
+			task.cancel()
+			await task.value
+		}
+
+		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
+	}
+
+	// MARK: - Repeated use
+
+	/// The stress tests elsewhere create hundreds of streams but assert nothing, so a leak of one
+	/// FSEventStream per iteration would pass them all. This is the assertion that catches it.
+	@Test func `creating and dropping many streams leaves none running`() async throws {
+		let tempDir = try Self.makeTempDir()
+		defer { try? FileManager.default.removeItem(at: tempDir) }
+
+		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
+		for _ in 0..<50 {
+			_ = try FolderContentMonitor.makeStream(url: tempDir)
+		}
+
+		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
+	}
 }

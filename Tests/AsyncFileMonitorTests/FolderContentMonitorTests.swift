@@ -53,6 +53,9 @@ struct FolderContentMonitorTests {
 			encoding: .utf8
 		)
 
+		// Bounded: a stream that never yields must fail the test, not hang it.
+		try await Task.sleep(for: .milliseconds(1500))
+		task.cancel()
 		let event = await task.value
 		#expect(event != nil)
 	}
@@ -78,6 +81,9 @@ struct FolderContentMonitorTests {
 			encoding: .utf8
 		)
 
+		// Bounded: a stream that never yields must fail the test, not hang it.
+		try await Task.sleep(for: .milliseconds(1500))
+		task.cancel()
 		let event = await task.value
 		#expect(event != nil)
 	}
@@ -192,5 +198,38 @@ struct FolderContentMonitorTests {
 		writerTask.cancel()
 
 		try await Task.sleep(for: .milliseconds(200))
+	}
+
+	@Test func `one stream can monitor several paths at once`() async throws {
+		let first = try Self.makeTempDir()
+		let second = try Self.makeTempDir()
+		defer {
+			try? FileManager.default.removeItem(at: first)
+			try? FileManager.default.removeItem(at: second)
+		}
+
+		let stream = try FolderContentMonitor.makeStream(
+			paths: [first.path, second.path],
+			configuration: .init(latency: 0.1)
+		)
+		let expected: Set<String> = ["in_first.txt", "in_second.txt"]
+
+		let task = Task { () -> Set<String> in
+			var seen: Set<String> = []
+			for await event in stream where expected.contains(event.filename) {
+				seen.insert(event.filename)
+				if seen == expected { break }
+			}
+			return seen
+		}
+
+		try await Task.sleep(for: .milliseconds(300))
+		try "a".write(to: first.appendingPathComponent("in_first.txt"), atomically: true, encoding: .utf8)
+		try "b".write(to: second.appendingPathComponent("in_second.txt"), atomically: true, encoding: .utf8)
+
+		try await Task.sleep(for: .milliseconds(2000))
+		task.cancel()
+
+		#expect(await task.value == expected)
 	}
 }

@@ -75,22 +75,4 @@ struct BatchedStreamTests {
 			"a coalesced atomic save should surface as a batch of several events, got \(batches.map(\.count))"
 		)
 	}
-
-	@Test func `batched stream releases its FSEventStream when dropped`() async throws {
-		let tempDir = try Self.makeTempDir()
-		defer { try? FileManager.default.removeItem(at: tempDir) }
-
-		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
-		do {
-			_ = try FolderContentMonitor.makeBatchedStream(url: tempDir)
-		}
-
-		var deadline = 50
-		while FileSystemEventStream.liveCount.load(ordering: .relaxed) > baseline && deadline > 0 {
-			try await Task.sleep(for: .milliseconds(100))
-			deadline -= 1
-		}
-
-		#expect(FileSystemEventStream.liveCount.load(ordering: .relaxed) <= baseline)
-	}
 }
