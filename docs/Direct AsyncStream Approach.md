@@ -1,5 +1,9 @@
 # Direct AsyncStream Approach for File System Monitoring
 
+> **Historical.** Describes an implementation that no longer exists. Kept for the
+> measurements and reasoning; see [Bridging FSEventStream to AsyncStream.md](Bridging%20FSEventStream%20to%20AsyncStream.md)
+> for how the library works now.
+
 **Reference**: 20250905T073442  
 **Implementation**: `Tests/RaceConditionTests/4_DirectAsyncStream.swift`
 

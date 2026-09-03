@@ -1,5 +1,9 @@
 # AsyncFileMonitor Quick Reference
 
+> **Historical.** Describes an implementation that no longer exists. Kept for the
+> measurements and reasoning; see [Bridging FSEventStream to AsyncStream.md](Bridging%20FSEventStream%20to%20AsyncStream.md)
+> for how the library works now.
+
 ## Critical Code Locations
 
 ### Event Ordering Protection (ref: 20250904T080826)

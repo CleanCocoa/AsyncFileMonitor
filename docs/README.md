@@ -7,14 +7,14 @@ This directory contains technical documentation for the AsyncFileMonitor library
 ## Documents
 
 ### [Event Ordering Analysis.md](Event%20Ordering%20Analysis.md)
-Comprehensive analysis of event ordering in the file monitoring pipeline, including:
+*Historical.* Comprehensive analysis of event ordering in the file monitoring pipeline, including:
 - The critical role of executor preference
 - How to reproduce ordering issues
 - Test results and findings
 - Architecture overview
 
 ### [Event Reordering with Executor.md](Event%20Reordering%20with%20Executor.md)  
-Detailed explanation of why events can still arrive out of order even WITH executor preference:
+*Historical.* Detailed explanation of why events can still arrive out of order even WITH executor preference:
 - Multiple sources of reordering in the pipeline
 - Swift concurrency timing variations
 - Real-world implications and solutions
@@ -41,17 +41,10 @@ Every `FSEventStreamEventFlags` bit, grouped by what it obliges a consumer to do
 - Why `RootChanged` cannot fire without `kFSEventStreamCreateFlagWatchRoot`
 
 ### [Quick Reference.md](Quick%20Reference.md)
-Quick reference guide for developers:
-- Critical code locations
-- Test commands
-- How to break and fix event ordering
+*Historical.* Points at the actor/executor implementation, including files that no longer exist.
 
 ### [Direct AsyncStream Approach.md](Direct%20AsyncStream%20Approach.md)
-**Superior Alternative**: Documentation of a direct AsyncStream approach that bypasses actors entirely:
-- Eliminates Swift concurrency scheduling issues
-- Uses MulticastAsyncStream with OrderedDictionary for perfect subscriber order
-- Swift 6 Mutex for modern synchronization
-- **Consistently maintains perfect ordering even under extreme stress**
+*Historical.* The direct-AsyncStream approach that replaced the actor/executor design, including the `MulticastAsyncStream` broadcaster that 3.0 removed. Kept for the stress-test results.
 
 ## Key Insights
 
@@ -67,10 +60,10 @@ The most important findings from our analysis:
 ### Direct AsyncStream Breakthrough (Reference: 20250905T073442)
 > **Bypassing Swift concurrency entirely eliminates ordering issues**
 
-- **Direct FSEventStream → MulticastAsyncStream flow**: Perfect ordering under all tested conditions
+- **Direct FSEventStream → AsyncStream flow**: Perfect ordering under all tested conditions
 - **No Task scheduling**: Events never cross async/await boundaries where reordering can occur
-- **OrderedDictionary subscribers**: Deterministic event delivery order
-- **Swift 6 Mutex**: Modern, safe synchronization without actor overhead
+
+The multicast broadcaster this originally fanned out through was removed in 3.0; the ordering result is a property of the direct callback path, which remains.
 
 ## Reference IDs
 
@@ -100,9 +93,7 @@ swift test --filter highStressOrderingTest
 ## Architecture
 
 ```
-FSEventStream → Dispatch Queue → Task(executorPreference) → Actor → AsyncStream
-                                  ↑
-                                  Critical synchronization point
+FSEventStream → Dispatch Queue → C callback → AsyncStream continuation
 ```
 
-The executor preference at the Task creation point is the primary defense against event reordering, though it cannot prevent all reordering due to upstream buffering and scheduling.
+There is no Task boundary in the path, which is what earlier designs needed executor preference to defend — and could not fully.
