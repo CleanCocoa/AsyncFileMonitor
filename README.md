@@ -131,6 +131,19 @@ Task {
 
 Across streams there is no such relationship. Each owns its own FSEventStream, so the same file change can carry different event IDs and land on different coalescing boundaries in each. Do not line up one stream's events against another's.
 
+### Batched Delivery
+
+FSEvents groups related changes into one callback: an atomic save arrives as a single batch naming the temporary file, the final file, and the metadata changes the OS made along the way. `makeStream` flattens that grouping; `makeBatchedStream` preserves it.
+
+```swift
+for await batch in FolderContentMonitor.makeBatchedStream(url: documentsURL, latency: 0.3) {
+    // One coalesced group of changes — e.g. all the events of a single save
+    await reconcile(batch)
+}
+```
+
+Batches are never empty. Stream conditions appear inside them at the position FSEvents produced them, which matters: a change reported *after* `.mustScanSubDirectories` survives the rescan it demands, one reported *before* it does not.
+
 ## Event Types
 
 The `Change` struct provides detailed information about what changed:
