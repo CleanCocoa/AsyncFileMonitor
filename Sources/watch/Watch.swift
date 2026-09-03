@@ -33,16 +33,24 @@ struct Watch {
 
 		// Note: AsyncFileMonitorLogger removed for simplicity
 
-		// Create the monitor stream
-		let stream = FolderContentMonitor.makeStream(paths: paths)
+		let stream: AsyncStream<FolderContentChangeEvent>
+		do {
+			stream = try FolderContentMonitor.makeStream(paths: paths)
+		} catch {
+			print("❌ Could not start monitoring: \(error)")
+			exit(1)
+		}
 
 		// Monitor for changes
 		for await event in stream {
 			let timestamp = DateFormatter.timestamp.string(from: Date())
-			let changeDescription = event.change.description.isEmpty ? "unknown" : event.change.description
-
 			print("[\(timestamp)] 📄 \(event.eventPath)")
-			print("                🔄 \(changeDescription)")
+			if !event.change.isEmpty {
+				print("                🔄 \(event.change)")
+			}
+			if !event.condition.isEmpty {
+				print("                ⚠️  \(event.condition)")
+			}
 			print("                🆔 Event ID: \(event.eventID)")
 			print("")
 		}

@@ -18,7 +18,8 @@ struct FolderContentMonitorTests {
 
 		var tasks: [Task<Void, Never>] = []
 		for _ in 0..<100 {
-			tasks.append(Task { for await _ in FolderContentMonitor.makeStream(url: tempDir) {} })
+			let stream = try FolderContentMonitor.makeStream(url: tempDir)
+			tasks.append(Task { for await _ in stream {} })
 		}
 
 		try await Task.sleep(for: .milliseconds(100))
@@ -35,7 +36,7 @@ struct FolderContentMonitorTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
-		let stream = FolderContentMonitor.makeStream(url: tempDir)
+		let stream = try FolderContentMonitor.makeStream(url: tempDir)
 
 		let task = Task { () -> FolderContentChangeEvent? in
 			for await event in stream {
@@ -60,7 +61,7 @@ struct FolderContentMonitorTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
-		let stream = FolderContentMonitor.makeStream(paths: [tempDir.path])
+		let stream = try FolderContentMonitor.makeStream(paths: [tempDir.path])
 
 		let task = Task { () -> FolderContentChangeEvent? in
 			for await event in stream {
@@ -85,8 +86,8 @@ struct FolderContentMonitorTests {
 		let tempDir = try Self.makeTempDir()
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
+		let stream = try FolderContentMonitor.makeStream(url: tempDir)
 		let task = Task<Void, Never> {
-			let stream = FolderContentMonitor.makeStream(url: tempDir)
 			for await _ in stream {}
 		}
 
@@ -100,7 +101,7 @@ struct FolderContentMonitorTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		do {
-			_ = FolderContentMonitor.makeStream(url: tempDir)
+			_ = try FolderContentMonitor.makeStream(url: tempDir)
 		}
 
 		try await Task.sleep(for: .milliseconds(200))
@@ -115,9 +116,9 @@ struct FolderContentMonitorTests {
 		// names exactly so those intermediates cannot stand in for the files under test.
 		let expectedFilenames = Set((0..<fileCount).map { "independent_\($0).txt" })
 
-		let stream1 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
-		let stream2 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
-		let stream3 = FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let stream1 = try FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let stream2 = try FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
+		let stream3 = try FolderContentMonitor.makeStream(url: tempDir, latency: 0.1)
 
 		func collectCreationEvents(
 			from stream: AsyncStream<FolderContentChangeEvent>
@@ -182,7 +183,7 @@ struct FolderContentMonitorTests {
 		}
 
 		for _ in 0..<500 {
-			let stream = FolderContentMonitor.makeStream(url: tempDir, latency: 0)
+			let stream = try FolderContentMonitor.makeStream(url: tempDir, latency: 0)
 			let task = Task { for await _ in stream {} }
 			try await Task.sleep(for: .milliseconds(5))
 			task.cancel()

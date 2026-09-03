@@ -101,7 +101,7 @@ struct FileSystemEventStream: ~Copyable {
 		sinceWhen: FSEventStreamEventId,
 		latency: CFTimeInterval,
 		eventHandler: @escaping @Sendable ([FolderContentChangeEvent]) -> Void
-	) throws -> FileSystemEventStream {
+	) throws(FileSystemEventStream.Error) -> FileSystemEventStream {
 		let queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
 		let eventHandlerBox = EventHandlerBox(handler: eventHandler)
 

@@ -32,7 +32,7 @@ The simplest way to monitor files is using ``FolderContentMonitor``:
 import AsyncFileMonitor
 
 // Monitor a single directory
-let stream = FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/Users/you/Documents"))
+let stream = try FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/Users/you/Documents"))
 
 for await event in stream {
     print("File changed: \(event.filename)")
@@ -95,7 +95,7 @@ Use Swift's structured concurrency for proper resource management:
 
 ```swift
 let monitorTask = Task {
-    let stream = FolderContentMonitor.makeStream(url: documentsURL)
+    let stream = try FolderContentMonitor.makeStream(url: documentsURL)
     
     for await event in stream {
         await handleFileChange(event)
@@ -111,7 +111,7 @@ defer { monitorTask.cancel() }
 Monitor several directories simultaneously:
 
 ```swift
-let stream = FolderContentMonitor.makeStream(paths: [
+let stream = try FolderContentMonitor.makeStream(paths: [
     "/Users/you/Documents",
     "/Users/you/Desktop", 
     "/Users/you/Downloads"
@@ -127,7 +127,7 @@ for await event in stream {
 For fine-tuned control, pass the optional parameters:
 
 ```swift
-let stream = FolderContentMonitor.makeStream(
+let stream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Wait 0.5 seconds to coalesce events
 )
@@ -144,10 +144,10 @@ Control event coalescing to reduce noise:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let stream = FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
 
 // 1-second latency - coalesces rapid changes
-let stream = FolderContentMonitor.makeStream(url: url, latency: 1.0)
+let stream = try FolderContentMonitor.makeStream(url: url, latency: 1.0)
 ```
 
 ## Error Handling
@@ -164,7 +164,7 @@ guard FileManager.default.fileExists(atPath: path) else {
     return
 }
 
-let stream = FolderContentMonitor.makeStream(url: url)
+let stream = try FolderContentMonitor.makeStream(url: url)
 ```
 
 ## Next Steps

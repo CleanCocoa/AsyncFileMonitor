@@ -24,7 +24,7 @@ AsyncFileMonitor is the modernized successor to RxFileMonitor, providing the sam
 import AsyncFileMonitor
 
 // Monitor a directory
-let eventStream = FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/path/to/monitor/"))
+let eventStream = try FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/path/to/monitor/"))
 
 // Use async/await to process events
 for await event in eventStream {
@@ -33,13 +33,30 @@ for await event in eventStream {
 }
 ```
 
+### Startup Failure
+
+The factories throw `FolderContentMonitor.Error` if the FSEventStream cannot be created or started. FSEvents can only fail during setup, never once running — so a stream you are holding is a stream that started, and a stream that finishes has been torn down by its consumer rather than having silently died.
+
+```swift
+do {
+    for await event in try FolderContentMonitor.makeStream(url: documentsURL) {
+        await handle(event)
+    }
+    // Reached only when the consumer stopped iterating.
+} catch {
+    logger.error("Monitoring never started: \(error)")
+}
+```
+
+Watching a path that does not exist yet is *not* a failure: FSEvents reports its creation.
+
 ### Advanced Configuration
 
 ```swift
 import AsyncFileMonitor
 
 // Create a stream with custom configuration
-let eventStream = FolderContentMonitor.makeStream(
+let eventStream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Coalesce rapid changes
 )
@@ -59,7 +76,7 @@ for await event in eventStream {
 ### Monitoring Multiple Paths
 
 ```swift
-let eventStream = FolderContentMonitor.makeStream(paths: [
+let eventStream = try FolderContentMonitor.makeStream(paths: [
     "/Users/you/Documents", 
     "/Users/you/Desktop"
 ])
@@ -72,7 +89,7 @@ for await event in eventStream {
 ### Task-based Processing
 
 ```swift
-let eventStream = FolderContentMonitor.makeStream(url: folderURL)
+let eventStream = try FolderContentMonitor.makeStream(url: folderURL)
 
 let monitorTask = Task {
     for await event in eventStream {
@@ -88,7 +105,7 @@ monitorTask.cancel()
 ### Filtering Events
 
 ```swift
-let eventStream = FolderContentMonitor.makeStream(url: documentsURL)
+let eventStream = try FolderContentMonitor.makeStream(url: documentsURL)
 
 for await event in eventStream
 where event.change.contains(.isFile) && event.change.contains(.modified) {
@@ -102,9 +119,9 @@ Each call to `makeStream` creates its own FSEventStream, so the streams below ar
 
 ```swift
 // Create multiple independent streams monitoring the same directory
-let uiUpdateStream = FolderContentMonitor.makeStream(url: documentsURL)
-let backupStream = FolderContentMonitor.makeStream(url: documentsURL)
-let logStream = FolderContentMonitor.makeStream(url: documentsURL)
+let uiUpdateStream = try FolderContentMonitor.makeStream(url: documentsURL)
+let backupStream = try FolderContentMonitor.makeStream(url: documentsURL)
+let logStream = try FolderContentMonitor.makeStream(url: documentsURL)
 
 // Process events differently in each stream
 Task {
@@ -136,7 +153,7 @@ Across streams there is no such relationship. Each owns its own FSEventStream, s
 FSEvents groups related changes into one callback: an atomic save arrives as a single batch naming the temporary file, the final file, and the metadata changes the OS made along the way. `makeStream` flattens that grouping; `makeBatchedStream` preserves it.
 
 ```swift
-for await batch in FolderContentMonitor.makeBatchedStream(url: documentsURL, latency: 0.3) {
+for await batch in try FolderContentMonitor.makeBatchedStream(url: documentsURL, latency: 0.3) {
     // One coalesced group of changes — e.g. all the events of a single save
     await reconcile(batch)
 }
@@ -172,10 +189,10 @@ Control event coalescing with the `latency` parameter:
 
 ```swift
 // No latency - all events reported immediately (can be noisy)
-let eventStream = FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let eventStream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
 
 // 1-second latency - coalesces rapid changes
-let eventStream = FolderContentMonitor.makeStream(url: url, latency: 1.0)
+let eventStream = try FolderContentMonitor.makeStream(url: url, latency: 1.0)
 ```
 
 A latency of 0.0 can produce too much noise when applications make multiple rapid changes to files. Experiment with slightly higher values (e.g., 0.1-1.0 seconds) to reduce noise.
@@ -244,7 +261,7 @@ monitor.rx.folderContentChange
 ```swift
 import AsyncFileMonitor
 
-let eventStream = FolderContentMonitor.makeStream(url: folderUrl)
+let eventStream = try FolderContentMonitor.makeStream(url: folderUrl)
 
 for await event in eventStream {
     print("File changed: \(event.filename)")

@@ -34,7 +34,7 @@ across a process is a different feature, tracked separately.
 
 ## What the bridge must do
 
-These five are not stylistic. Drop any one and the bridge is either unsound or
+These six are not stylistic. Drop any one and the bridge is either unsound or
 misordered.
 
 **A non-copyable RAII wrapper.** `FileSystemEventStream` is a `~Copyable`
@@ -52,6 +52,13 @@ a C callback.
 **Retain/release callbacks on the context.** Without them the box can be freed
 while the C side still holds the pointer. With them, `FSEventStreamRelease`
 drops the last reference and the box dies with the stream.
+
+**Failure reported at construction, not as an element.** FSEvents fails only
+while the stream is being set up, never once it is running. So the factory
+throws and a returned stream is one that started — which makes "the stream
+finished" mean consumer teardown and nothing else. Note this requires
+`AsyncStream.makeStream()`; the trailing-closure initializer's build closure
+cannot rethrow.
 
 **A direct callback-to-continuation path.** The C callback calls
 `continuation.yield` synchronously. No `Task`, no actor hop. This is the whole
@@ -171,9 +178,10 @@ cannot fail is worse than none, because it reads as coverage.
    above.
 2. **`FSEventStreamStart` can fail.** If it returns false, `FSEventStreamRelease`
    must still be called or the CF object leaks. A failure at either creation
-   step must also end the stream — otherwise the consumer holds an
-   `AsyncStream` that never yields and never finishes, and its `for await`
-   loop hangs forever.
+   step must reach the caller: a consumer holding an `AsyncStream` that never
+   yields and never finishes hangs in `for await` forever. Since 3.0 the
+   factories throw, which is only possible because creation happens
+   synchronously in the caller's frame — see "One shape".
 3. **`kFSEventStreamCreateFlagFileEvents` is essential.** Without it you get
    directory-level notifications only.
 4. **Latency controls coalescing, not atomicity.** `0.0` delivers immediately;

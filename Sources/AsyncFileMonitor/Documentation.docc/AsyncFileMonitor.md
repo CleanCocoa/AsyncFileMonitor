@@ -23,7 +23,7 @@ AsyncFileMonitor is the successor to RxFileMonitor, providing file monitoring ca
 import AsyncFileMonitor
 
 // Monitor a directory
-let eventStream = FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/path/to/monitor/"))
+let eventStream = try FolderContentMonitor.makeStream(url: URL(fileURLWithPath: "/path/to/monitor/"))
 
 // Use async/await to process events
 for await event in eventStream {
@@ -35,7 +35,7 @@ for await event in eventStream {
 ### Monitoring Multiple Paths
 
 ```swift
-let eventStream = FolderContentMonitor.makeStream(paths: [
+let eventStream = try FolderContentMonitor.makeStream(paths: [
     "/Users/you/Documents", 
     "/Users/you/Desktop"
 ])
@@ -49,7 +49,7 @@ for await event in eventStream {
 
 ```swift
 // Create a stream with custom configuration
-let eventStream = FolderContentMonitor.makeStream(
+let eventStream = try FolderContentMonitor.makeStream(
     url: URL(fileURLWithPath: "/Users/you/Documents"),
     latency: 0.5  // Coalesce rapid changes
 )
@@ -71,9 +71,9 @@ for await event in eventStream {
 Each stream owns its own FSEventStream and is fully independent: one ending does not affect the others, and each coalesces events on its own. Event IDs and batch boundaries can therefore differ between streams watching the same path.
 
 ```swift
-let uiUpdateStream = FolderContentMonitor.makeStream(url: documentsURL)
-let backupStream = FolderContentMonitor.makeStream(url: documentsURL)
-let logStream = FolderContentMonitor.makeStream(url: documentsURL)
+let uiUpdateStream = try FolderContentMonitor.makeStream(url: documentsURL)
+let backupStream = try FolderContentMonitor.makeStream(url: documentsURL)
+let logStream = try FolderContentMonitor.makeStream(url: documentsURL)
 
 Task {
     for await event in uiUpdateStream {

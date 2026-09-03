@@ -42,7 +42,7 @@ disposeBag = DisposeBag()
 ```swift
 import AsyncFileMonitor
 
-let stream = FolderContentMonitor.makeStream(url: folderUrl)
+let stream = try FolderContentMonitor.makeStream(url: folderUrl)
 
 for await event in stream {
     print("File changed: \(event.filename)")
@@ -56,7 +56,7 @@ for await event in stream {
 import AsyncFileMonitor
 
 let monitorTask = Task {
-    let stream = FolderContentMonitor.makeStream(url: folderUrl)
+    let stream = try FolderContentMonitor.makeStream(url: folderUrl)
     
     for await event in stream {
         print("File changed: \(event.filename)")
@@ -84,7 +84,7 @@ monitor.rx.folderContentChange
 ### AsyncFileMonitor Filtering
 
 ```swift
-let stream = FolderContentMonitor.makeStream(url: folderUrl)
+let stream = try FolderContentMonitor.makeStream(url: folderUrl)
 
 for await event in stream 
 where event.change.contains(.isFile) && event.change.contains(.modified) {
@@ -118,8 +118,8 @@ monitor.rx.folderContentChange
 
 ```swift
 // Create independent streams
-let uiStream = FolderContentMonitor.makeStream(url: folderUrl)
-let backgroundStream = FolderContentMonitor.makeStream(url: folderUrl)
+let uiStream = try FolderContentMonitor.makeStream(url: folderUrl)
+let backgroundStream = try FolderContentMonitor.makeStream(url: folderUrl)
 
 // UI updates
 Task { @MainActor in
@@ -157,7 +157,7 @@ monitor.rx.folderContentChange
 
 ```swift
 do {
-    let stream = FolderContentMonitor.makeStream(url: folderUrl)
+    let stream = try FolderContentMonitor.makeStream(url: folderUrl)
     
     for await event in stream {
         await processEvent(event)
@@ -189,7 +189,7 @@ Observable.merge([
 
 ```swift
 // Option 1: Monitor multiple paths with single stream
-let stream = FolderContentMonitor.makeStream(paths: [
+let stream = try FolderContentMonitor.makeStream(paths: [
     documentsUrl.path,
     desktopUrl.path
 ])
@@ -201,14 +201,14 @@ for await event in stream {
 // Option 2: Merge streams using TaskGroup
 await withTaskGroup(of: Void.self) { group in
     group.addTask {
-        let stream = FolderContentMonitor.makeStream(url: documentsUrl)
+        let stream = try FolderContentMonitor.makeStream(url: documentsUrl)
         for await event in stream {
             await handleEvent(event)
         }
     }
     
     group.addTask {
-        let stream = FolderContentMonitor.makeStream(url: desktopUrl)
+        let stream = try FolderContentMonitor.makeStream(url: desktopUrl)
         for await event in stream {
             await handleEvent(event)
         }
@@ -232,7 +232,7 @@ monitor.rx.folderContentChange
 ### Debouncing (AsyncFileMonitor)
 
 ```swift
-let stream = FolderContentMonitor.makeStream(url: folderUrl, latency: 0.5)
+let stream = try FolderContentMonitor.makeStream(url: folderUrl, latency: 0.5)
 
 for await event in stream {
     // Events are automatically coalesced by FSEvents
@@ -277,13 +277,13 @@ AsyncFileMonitor requires an async context:
 ```swift
 // ❌ Won't compile
 func setupMonitoring() {
-    let stream = FolderContentMonitor.makeStream(url: url)
+    let stream = try FolderContentMonitor.makeStream(url: url)
     // Cannot use 'for await' in non-async function
 }
 
 // ✅ Correct
 func setupMonitoring() async {
-    let stream = FolderContentMonitor.makeStream(url: url)
+    let stream = try FolderContentMonitor.makeStream(url: url)
     for await event in stream {
         // Handle event
     }
@@ -296,13 +296,13 @@ Remember to manage long-running tasks:
 ```swift
 // ❌ Task may leak
 Task {
-    let stream = FolderContentMonitor.makeStream(url: url)
+    let stream = try FolderContentMonitor.makeStream(url: url)
     for await event in stream { /* ... */ }
 }
 
 // ✅ Proper task management
 let monitorTask = Task {
-    let stream = FolderContentMonitor.makeStream(url: url)  
+    let stream = try FolderContentMonitor.makeStream(url: url)  
     for await event in stream { /* ... */ }
 }
 

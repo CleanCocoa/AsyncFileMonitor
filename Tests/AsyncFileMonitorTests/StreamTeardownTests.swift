@@ -68,7 +68,7 @@ struct StreamTeardownTests {
 		defer { try? FileManager.default.removeItem(at: tempDir) }
 
 		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
-		do { _ = FolderContentMonitor.makeStream(url: tempDir) }
+		do { _ = try FolderContentMonitor.makeStream(url: tempDir) }
 
 		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
 	}
@@ -79,7 +79,7 @@ struct StreamTeardownTests {
 
 		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
 		do {
-			let stream = FolderContentMonitor.makeStream(url: tempDir)
+			let stream = try FolderContentMonitor.makeStream(url: tempDir)
 			let task = Task { for await _ in stream {} }
 			try await Task.sleep(for: .milliseconds(100))
 			task.cancel()
@@ -95,7 +95,7 @@ struct StreamTeardownTests {
 
 		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
 		do {
-			let stream = FolderContentMonitor.makeStream(url: tempDir)
+			let stream = try FolderContentMonitor.makeStream(url: tempDir)
 			let task = Task {
 				try? "trigger".write(
 					to: tempDir.appendingPathComponent("trigger.txt"),
@@ -105,6 +105,18 @@ struct StreamTeardownTests {
 				for await _ in stream { break }
 			}
 			await task.value
+		}
+
+		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)
+	}
+
+	/// `liveCount` is process-wide, so this belongs in the serialized suite rather than beside
+	/// the other startup-failure tests.
+	@Test func `a failed startup leaves no FSEventStream running`() async throws {
+		let baseline = FileSystemEventStream.liveCount.load(ordering: .relaxed)
+
+		#expect(throws: FolderContentMonitor.Error.self) {
+			_ = try FolderContentMonitor.makeStream(paths: [])
 		}
 
 		#expect(await Self.waitForLiveCount(toReachAtMost: baseline) <= baseline)

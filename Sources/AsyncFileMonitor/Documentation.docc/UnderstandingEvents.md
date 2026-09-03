@@ -197,10 +197,10 @@ Use the `latency` parameter to reduce event noise:
 
 ```swift
 // High-frequency monitoring (noisy)
-let stream = FolderContentMonitor.makeStream(url: url, latency: 0.0)
+let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.0)
 
 // Coalesced monitoring (cleaner)
-let stream = FolderContentMonitor.makeStream(url: url, latency: 0.5)
+let stream = try FolderContentMonitor.makeStream(url: url, latency: 0.5)
 ```
 
 Higher latency values reduce the number of events but increase the delay between the actual change and notification.
@@ -210,7 +210,7 @@ Higher latency values reduce the number of events but increase the delay between
 Log events to understand patterns in your application:
 
 ```swift
-let stream = FolderContentMonitor.makeStream(url: url)
+let stream = try FolderContentMonitor.makeStream(url: url)
 
 for await event in stream {
     print("📁 \(event.eventPath)")

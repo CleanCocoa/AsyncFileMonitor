@@ -24,7 +24,33 @@ import Foundation
 /// Each stream owns its own `FSEventStream`, created synchronously when the factory returns and
 /// torn down when the stream terminates — whether the consumer breaks out of iteration, cancels
 /// its task, or drops the stream without iterating.
+///
+/// Because creation is synchronous, the factories throw rather than handing back a stream that
+/// never yields: a stream you hold is a stream that started. Nothing but consumer teardown ends
+/// one, so a finished stream is never an unreported failure.
 public enum FolderContentMonitor {
+
+	/// Why monitoring could not start.
+	///
+	/// FSEvents can only fail while the stream is being set up, never once it is running, so
+	/// this is thrown by the factories and never delivered as an event.
+	public enum Error: Swift.Error {
+		/// `FSEventStreamCreate` returned no stream, which happens only for an invalid argument.
+		case creationFailed
+
+		/// `FSEventStreamStart` refused to start the stream.
+		///
+		/// Apple documents this as something that "ought to always succeed"; if it does not,
+		/// the recommended fallback is to scan the directories yourself.
+		case startFailed
+
+		init(_ error: FileSystemEventStream.Error) {
+			switch error {
+			case .creationFailed: self = .creationFailed
+			case .startFailed: self = .startFailed
+			}
+		}
+	}
 
 	/// Create an `AsyncStream` to monitor file system events.
 	///
@@ -36,9 +62,9 @@ public enum FolderContentMonitor {
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
-	) -> AsyncStream<FolderContentChangeEvent> {
+	) throws(Error) -> AsyncStream<FolderContentChangeEvent> {
 		precondition(url.isFileURL)
-		return makeStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
+		return try makeStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
 	}
 
 	/// Create an `AsyncStream` to monitor file system events.
@@ -51,8 +77,8 @@ public enum FolderContentMonitor {
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
-	) -> AsyncStream<FolderContentChangeEvent> {
-		makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
+	) throws(Error) -> AsyncStream<FolderContentChangeEvent> {
+		try makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
 			for event in batch { continuation.yield(event) }
 		}
 	}
@@ -76,9 +102,9 @@ public enum FolderContentMonitor {
 		url: URL,
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
-	) -> AsyncStream<[FolderContentChangeEvent]> {
+	) throws(Error) -> AsyncStream<[FolderContentChangeEvent]> {
 		precondition(url.isFileURL)
-		return makeBatchedStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
+		return try makeBatchedStream(paths: [url.path], sinceWhen: sinceWhen, latency: latency)
 	}
 
 	/// Create an `AsyncStream` delivering one FSEvents callback's worth of events at a time.
@@ -94,8 +120,8 @@ public enum FolderContentMonitor {
 		paths: [String],
 		sinceWhen: FSEventStreamEventId = FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 		latency: CFTimeInterval = 0
-	) -> AsyncStream<[FolderContentChangeEvent]> {
-		makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
+	) throws(Error) -> AsyncStream<[FolderContentChangeEvent]> {
+		try makeStream(paths: paths, sinceWhen: sinceWhen, latency: latency) { batch, continuation in
 			continuation.yield(batch)
 		}
 	}
@@ -110,27 +136,26 @@ public enum FolderContentMonitor {
 		sinceWhen: FSEventStreamEventId,
 		latency: CFTimeInterval,
 		deliver: @escaping @Sendable ([FolderContentChangeEvent], AsyncStream<Element>.Continuation) -> Void
-	) -> AsyncStream<Element> {
-		AsyncStream { continuation in
-			do {
-				let eventStream = try FileSystemEventStream.make(
-					paths: paths,
-					sinceWhen: sinceWhen,
-					latency: latency,
-					eventHandler: { batch in deliver(batch, continuation) }
-				)
+	) throws(Error) -> AsyncStream<Element> {
+		let (stream, continuation) = AsyncStream<Element>.makeStream()
+		do {
+			let eventStream = try FileSystemEventStream.make(
+				paths: paths,
+				sinceWhen: sinceWhen,
+				latency: latency,
+				eventHandler: { batch in deliver(batch, continuation) }
+			)
 
-				// Capturing the box here is what keeps the FSEventStream running: it lives
-				// exactly as long as the termination handler, which `AsyncStream` releases
-				// once the stream terminates.
-				let box = EventStreamBox(eventStream)
-				continuation.onTermination = { _ in
-					withExtendedLifetime(box) {}
-				}
-			} catch {
-				print("Failed to create FileSystemEventStream: \(error)")
-				continuation.finish()
+			// Capturing the box here is what keeps the FSEventStream running: it lives
+			// exactly as long as the termination handler, which `AsyncStream` releases
+			// once the stream terminates.
+			let box = EventStreamBox(eventStream)
+			continuation.onTermination = { _ in
+				withExtendedLifetime(box) {}
 			}
+			return stream
+		} catch {
+			throw Error(error)
 		}
 	}
 }
