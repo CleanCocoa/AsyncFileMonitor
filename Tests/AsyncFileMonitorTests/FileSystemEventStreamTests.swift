@@ -21,8 +21,8 @@ struct FileSystemEventStreamTests {
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.1
-			) { event in
-				if event.eventPath.hasSuffix("test.txt") {
+			) { batch in
+				for event in batch where event.eventPath.hasSuffix("test.txt") {
 					confirmation()
 				}
 			}
@@ -49,8 +49,8 @@ struct FileSystemEventStreamTests {
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.01
-			) { event in
-				_ = event
+			) { batch in
+				_ = batch
 			}
 
 			try await Task.sleep(for: .milliseconds(10))
@@ -78,8 +78,8 @@ struct FileSystemEventStreamTests {
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.01
-			) { event in
-				_ = event
+			) { batch in
+				_ = batch
 			}
 
 			try "data".write(
@@ -103,10 +103,12 @@ struct FileSystemEventStreamTests {
 				paths: [tempDir.path],
 				sinceWhen: FSEventStreamEventId(kFSEventStreamEventIdSinceNow),
 				latency: 0.1
-			) { event in
-				let filename = URL(fileURLWithPath: event.eventPath).lastPathComponent
-				if fileNames.contains(filename) {
-					confirmation()
+			) { batch in
+				for event in batch {
+					let filename = URL(fileURLWithPath: event.eventPath).lastPathComponent
+					if fileNames.contains(filename) {
+						confirmation()
+					}
 				}
 			}
 

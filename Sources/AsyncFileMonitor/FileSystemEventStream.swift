@@ -36,14 +36,18 @@ struct FileSystemEventStream: ~Copyable {
 	/// Carries the event handler through the `FSEventStreamContext`, which can only hold an
 	/// opaque pointer.
 	private final class EventHandlerBox: Sendable {
-		let handler: @Sendable (FolderContentChangeEvent) -> Void
+		let handler: @Sendable ([FolderContentChangeEvent]) -> Void
 
-		init(handler: @escaping @Sendable (FolderContentChangeEvent) -> Void) {
+		init(handler: @escaping @Sendable ([FolderContentChangeEvent]) -> Void) {
 			self.handler = handler
 		}
 	}
 
-	/// Forwards events straight to the handler on the stream's dispatch queue.
+	/// Forwards one callback's worth of events to the handler on the stream's dispatch queue.
+	///
+	/// The batch is delivered whole because FSEvents' coalescing boundary is meaningful: an
+	/// atomic save arrives as one callback naming several paths. Flattening here would discard
+	/// it before any consumer could see it.
 	///
 	/// Deliberately free of Task hops: scheduling here would let Swift concurrency reorder
 	/// events that FSEvents delivered in order.
@@ -58,16 +62,20 @@ struct FileSystemEventStream: ~Copyable {
 		let eventHandler = Unmanaged<EventHandlerBox>.fromOpaque(contextInfo)
 			.takeUnretainedValue().handler
 
+		var batch: [FolderContentChangeEvent] = []
+		batch.reserveCapacity(numEvents)
 		for index in 0..<numEvents {
 			let flags = eventFlags[index]
-			let event = FolderContentChangeEvent(
-				eventID: eventIDs[index],
-				eventPath: paths[index],
-				change: Change(eventFlags: flags),
-				condition: StreamCondition(eventFlags: flags)
+			batch.append(
+				FolderContentChangeEvent(
+					eventID: eventIDs[index],
+					eventPath: paths[index],
+					change: Change(eventFlags: flags),
+					condition: StreamCondition(eventFlags: flags)
+				)
 			)
-			eventHandler(event)
 		}
+		eventHandler(batch)
 	}
 
 	private let streamRef: FSEventStreamRef
@@ -86,13 +94,13 @@ struct FileSystemEventStream: ~Copyable {
 	///   - paths: File system paths to monitor
 	///   - sinceWhen: FSEvent ID to start monitoring from
 	///   - latency: Event coalescing interval in seconds
-	///   - eventHandler: Sendable closure to handle events
+	///   - eventHandler: Sendable closure receiving one FSEvents callback's worth of events
 	/// - Throws: ``FileSystemEventStream/Error`` if stream creation or start fails
 	static func make(
 		paths: [String],
 		sinceWhen: FSEventStreamEventId,
 		latency: CFTimeInterval,
-		eventHandler: @escaping @Sendable (FolderContentChangeEvent) -> Void
+		eventHandler: @escaping @Sendable ([FolderContentChangeEvent]) -> Void
 	) throws -> FileSystemEventStream {
 		let queue = DispatchQueue(label: "FileSystemEventStream", qos: .userInteractive)
 		let eventHandlerBox = EventHandlerBox(handler: eventHandler)

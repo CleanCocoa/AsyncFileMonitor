@@ -165,8 +165,8 @@ nonisolated public final class FolderContentMonitor: Sendable {
 						paths: paths,
 						sinceWhen: sinceWhen,
 						latency: latency,
-						eventHandler: { [multicastStream] event in
-							multicastStream.send(event)
+						eventHandler: { [multicastStream] batch in
+							for event in batch { multicastStream.send(event) }
 						}
 					)
 					state = .streaming(lifecycleTask: task, eventStream: eventStream)
@@ -246,8 +246,8 @@ nonisolated public final class FolderContentMonitor: Sendable {
 					paths: paths,
 					sinceWhen: sinceWhen,
 					latency: latency,
-					eventHandler: { event in
-						continuation.yield(event)
+					eventHandler: { batch in
+						for event in batch { continuation.yield(event) }
 					}
 				)
 
