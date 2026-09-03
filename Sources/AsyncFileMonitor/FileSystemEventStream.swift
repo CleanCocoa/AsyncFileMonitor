@@ -137,6 +137,10 @@ struct FileSystemEventStream: ~Copyable {
 		FSEventStreamSetDispatchQueue(stream, queue)
 
 		guard FSEventStreamStart(stream) else {
+			// The stream is scheduled by now, and the headers make Invalidate mandatory once it
+			// is: releasing without it leaves the queue holding the stream, so the context's
+			// release callback never runs and the handler box leaks with it.
+			FSEventStreamInvalidate(stream)
 			FSEventStreamRelease(stream)
 			throw Error.startFailed
 		}
@@ -146,10 +150,12 @@ struct FileSystemEventStream: ~Copyable {
 	}
 
 	deinit {
-		FileSystemEventStream.liveCount.subtract(1, ordering: .relaxed)
 		FSEventStreamStop(streamRef)
 		FSEventStreamInvalidate(streamRef)
 		FSEventStreamRelease(streamRef)
+		// Decremented last so an observer never reads a count that excludes a stream still
+		// being torn down.
+		FileSystemEventStream.liveCount.subtract(1, ordering: .relaxed)
 	}
 }
 
@@ -162,6 +168,9 @@ struct FileSystemEventStream: ~Copyable {
 /// - Warning: `deinit` runs on whichever thread releases the box, and `FSEventStreamStop`
 ///   blocks until in-flight callbacks on the stream's dispatch queue have returned. Releasing
 ///   the last reference from that queue — i.e. from inside an event handler — deadlocks.
+///   Nothing in this library can: the event handler captures the continuation, never the box.
+///   `AsyncStream` also invokes its termination handler outside its internal lock, so the
+///   `FSEventStreamStop` this triggers cannot block against a callback trying to yield.
 final class EventStreamBox: @unchecked Sendable {
 	private let eventStream: FileSystemEventStream
 

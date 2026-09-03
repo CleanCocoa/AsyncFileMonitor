@@ -78,7 +78,9 @@ public struct Change: OptionSet, Sendable {
 
 	/// The change was caused by this process.
 	///
-	/// Useful to suppress reacting to your own writes.
+	/// - Note: Never reported as configured. The Core Services headers set this flag only for
+	///   streams created with `kFSEventStreamCreateFlagMarkSelf`, which this library does not
+	///   pass, so echo suppression is not available yet.
 	public static let ownEvent = Change(rawValue: kFSEventStreamEventFlagOwnEvent)
 }
 

@@ -66,8 +66,10 @@ the default never see it.
 The fifteen `0x100`-and-up flags map one-to-one onto `Change` members. Two are worth calling
 out:
 
-- `OwnEvent` (`0x80000`) — the change was caused by *this* process. The hook for suppressing
-  reactions to your own writes.
+- `OwnEvent` (`0x80000`) — the change was caused by *this* process. Like `RootChanged`, it is
+  **unreachable as configured**: the headers set it only for streams created with
+  `kFSEventStreamCreateFlagMarkSelf`, which this library does not pass. Named for completeness,
+  and because enabling it is the natural way to offer echo suppression.
 - `ItemCloned` (`0x400000`) — `clonefile(2)`, or duplicating in Finder.
 
 ## Why a product, not a sum
@@ -86,6 +88,11 @@ not anticipate.
 `change.isEmpty` is the discriminator for a condition-only element. That test only works
 because `Change(eventFlags:)` masks the low byte off — before 2.1.0 it stored the whole word,
 so the word was never empty.
+
+It is also coupled to `kFSEventStreamCreateFlagFileEvents`. Without that flag no item flag is
+ever set, so every ordinary event would have an empty `Change` and the discriminator would
+report each one as condition-only. Any future option that turns file-level events off has to
+supply a different discriminator; it cannot simply become a flag.
 
 ## Ordering
 

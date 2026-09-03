@@ -56,8 +56,7 @@ public enum FolderContentMonitor {
 	///
 	/// - Parameters:
 	///   - url: The file or directory URL to monitor
-	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
-	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - configuration: How the stream is set up (default: deliver changes from now on, uncoalesced)
 	public static func makeStream(
 		url: URL,
 		configuration: Configuration = Configuration()
@@ -70,8 +69,7 @@ public enum FolderContentMonitor {
 	///
 	/// - Parameters:
 	///   - paths: Array of file or directory paths to monitor
-	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
-	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - configuration: How the stream is set up (default: deliver changes from now on, uncoalesced)
 	public static func makeStream(
 		paths: [String],
 		configuration: Configuration = Configuration()
@@ -85,7 +83,7 @@ public enum FolderContentMonitor {
 	///
 	/// FSEvents groups related changes: an atomic save arrives as a single callback naming the
 	/// temporary file, the final file and the metadata changes the OS made along the way. Use
-	/// this form when that grouping matters; use ``makeStream(url:sinceWhen:latency:)`` when it
+	/// this form when that grouping matters; use ``makeStream(url:configuration:)`` when it
 	/// does not.
 	///
 	/// Batches are never empty, and ``StreamCondition`` elements appear in them at the position
@@ -94,8 +92,7 @@ public enum FolderContentMonitor {
 	///
 	/// - Parameters:
 	///   - url: The file or directory URL to monitor
-	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
-	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - configuration: How the stream is set up (default: deliver changes from now on, uncoalesced)
 	public static func makeBatchedStream(
 		url: URL,
 		configuration: Configuration = Configuration()
@@ -106,13 +103,12 @@ public enum FolderContentMonitor {
 
 	/// Create an `AsyncStream` delivering one FSEvents callback's worth of events at a time.
 	///
-	/// See ``makeBatchedStream(url:sinceWhen:latency:)`` for when to prefer this over the
+	/// See ``makeBatchedStream(url:configuration:)`` for when to prefer this over the
 	/// per-event form.
 	///
 	/// - Parameters:
 	///   - paths: Array of file or directory paths to monitor
-	///   - sinceWhen: FSEvent ID to start monitoring from (default: `kFSEventStreamEventIdSinceNow`)
-	///   - latency: Event coalescing interval in seconds (default: `0`)
+	///   - configuration: How the stream is set up (default: deliver changes from now on, uncoalesced)
 	public static func makeBatchedStream(
 		paths: [String],
 		configuration: Configuration = Configuration()
