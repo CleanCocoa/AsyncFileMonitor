@@ -26,7 +26,7 @@ EXECUTED_TESTS=0
 while IFS= read -r line; do
     # Test run summary - check first to ensure we never filter these out
     # Success case with known issues - new Swift Testing format: "􀢄  Test run with X tests passed after Y seconds with Z known issue."
-    if [[ "$line" =~ 􀢄.*Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds.*with.*known[[:space:]]+issue ]]; then
+    if [[ "$line" =~ Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds.*with.*known[[:space:]]+issue ]]; then
         echo
         echo -e "${GREEN}${BOLD}════════════════════════════════════════${NC}"
         echo -e "${GREEN}${BOLD}✓ ALL TESTS PASSED (with expected known issues)${NC}"
@@ -35,7 +35,7 @@ while IFS= read -r line; do
         continue
     fi
     # Success case - matches the actual format: "􁁛  Test run with X tests passed after Y seconds."
-    if [[ "$line" =~ 􁁛.*Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds ]]; then
+    if [[ "$line" =~ Test[[:space:]]+run[[:space:]]+with.*passed[[:space:]]+after.*seconds ]]; then
         echo
         echo -e "${GREEN}${BOLD}════════════════════════════════════════${NC}"
         echo -e "${GREEN}${BOLD}✓ ALL TESTS PASSED${NC}"
@@ -71,7 +71,7 @@ while IFS= read -r line; do
     fi
     
     # Test passed with known issues - show these as they're important
-    if [[ "$line" =~ ^[[:space:]]*􀢄[[:space:]]+Test.*passed.*after.*seconds.*with.*known[[:space:]]+issue ]]; then
+    if [[ "$line" =~ ^[[:space:]]*(􀢄|􀢂)[[:space:]]+Test.*passed.*after.*seconds.*with.*known[[:space:]]+issue ]]; then
         echo -e "${YELLOW}$line${NC}"
         ((TESTS_RUN++))
         continue
@@ -108,11 +108,11 @@ while IFS= read -r line; do
     fi
     
     # Handle known issues - show them with different formatting than failures
-    if [[ "$line" =~ ^[[:space:]]*􀢄[[:space:]]+Test[[:space:]]+\"([^\"]+)\".*recorded[[:space:]]+a[[:space:]]+known[[:space:]]+issue[[:space:]]+at[[:space:]]+([^:]+):([0-9]+):([0-9]+): ]]; then
-        TEST_NAME="${BASH_REMATCH[1]}"
-        FILE="${BASH_REMATCH[2]}"
-        LINE="${BASH_REMATCH[3]}"
-        COL="${BASH_REMATCH[4]}"
+    if [[ "$line" =~ ^[[:space:]]*(􀢄|􀢂)[[:space:]]+Test[[:space:]]+\"([^\"]+)\".*recorded[[:space:]]+a[[:space:]]+known[[:space:]]+issue[[:space:]]+at[[:space:]]+([^:]+):([0-9]+):([0-9]+): ]]; then
+        TEST_NAME="${BASH_REMATCH[2]}"
+        FILE="${BASH_REMATCH[3]}"
+        LINE="${BASH_REMATCH[4]}"
+        COL="${BASH_REMATCH[5]}"
         
         if [[ "$CURRENT_FAILING_TEST" != "$TEST_NAME" ]]; then
             echo
