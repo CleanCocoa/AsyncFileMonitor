@@ -6,7 +6,14 @@ import Testing
 
 /// Proves that dropping a stream tears down the kernel `FSEventStream`, not just the Swift wrapper.
 ///
-/// Serialized because the assertions read a process-wide live count.
+/// `.serialized` because every assertion here compares `FileSystemEventStream.liveCount` against
+/// a baseline sampled at the start of the test, and that counter is process-wide: two of these
+/// running at once would each see the other's streams.
+///
+/// The trait only orders tests *within* this suite, which is not sufficient on its own — another
+/// suite running concurrently can hold streams live (making an assertion false-pass) or release
+/// them mid-test (making one spuriously fail). `make test` therefore passes `--no-parallel`.
+/// Keep new `liveCount` assertions in this suite rather than beside the feature they cover.
 @Suite("Stream teardown", .serialized)
 struct StreamTeardownTests {
 

@@ -35,12 +35,15 @@ struct ReplayTests {
 		capture.cancel()
 		let resumeFrom = try #require(await capture.value, "never observed an event to resume from")
 
-		// 2. Change the folder with nothing watching it.
+		// 2. Change the folder with nothing watching it. Replay reads FSEvents' own log, so the
+		// write has to be journaled before the resuming stream is created — without this pause
+		// the test fails whenever nothing else is loading the machine.
 		try "two".write(
 			to: tempDir.appendingPathComponent("two.txt"),
 			atomically: true,
 			encoding: .utf8
 		)
+		try await Task.sleep(for: .milliseconds(500))
 
 		// 3. Resume. The missed change must be replayed, then the sentinel.
 		let replay = try FolderContentMonitor.makeStream(

@@ -6,8 +6,12 @@ format:
 build:
 	swift build
 
+# --no-parallel: the teardown tests assert against FileSystemEventStream.liveCount, which is
+# process-wide. Suite-level .serialized orders tests within a suite but not across suites, so a
+# concurrently running suite can hold streams live and make those assertions false-pass (or, as
+# the counter drops mid-test, spuriously fail). Costs ~50s against ~5s parallel.
 test:
-	swift test 2>&1 | ./scripts/swift-test-filter.sh
+	swift test --no-parallel 2>&1 | ./scripts/swift-test-filter.sh
 
 clean:
 	swift package clean
