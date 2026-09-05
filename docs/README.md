@@ -33,6 +33,14 @@ The constraints every FSEvents-to-`AsyncStream` bridge must satisfy, recorded as
 - The exact teardown sequence, including the asynchronous context release callback
 - FSEvents gotchas: blocking stop, failed start, file-level events, coalescing vs. atomicity
 
+### [Testing FSEvents Code.md](Testing%20FSEvents%20Code.md)
+What is provable about an FSEvents bridge and what is not:
+- Why the default failure mode is a hang rather than a red test, and how to bound it
+- `liveCount` is process-wide: how parallel suites make teardown assertions false-pass *and* false-fail
+- Negative controls — the deliberate breakages that proved each teardown test can fail
+- Which FSEvents conditions are reproducible on demand and which are flake generators
+- Checking that the test command itself can fail
+
 ### [FSEvents Flag Reference.md](FSEvents%20Flag%20Reference.md)
 Every `FSEventStreamEventFlags` bit, grouped by what it obliges a consumer to do:
 - The low-byte/high-bits partition that `StreamCondition` and `Change` mirror

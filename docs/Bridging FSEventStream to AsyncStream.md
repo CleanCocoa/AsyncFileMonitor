@@ -171,16 +171,61 @@ When changing this area, verify the tests still detect a leak — retain the box
 in a static and confirm the static-path tests go red. A teardown test that
 cannot fail is worse than none, because it reads as coverage.
 
+## Buffering
+
+The bridge uses `AsyncStream`'s default `.unbounded` policy. That is a decision,
+not an oversight, and it should survive contact with someone who thinks it looks
+careless.
+
+Measured on an M-series laptop: writing 20,000 files into a watched directory
+produced 21,794 events in 2.85s — roughly **7,600 events/sec** sustained, at
+about **140 bytes/event** by a rough accounting (realistically two to three
+times that once Swift `String` heap allocations count). A consumer ten seconds
+behind during heavy churn therefore holds tens of megabytes, then catches up.
+
+Three reasons unbounded is the right default here:
+
+- A burst is finite — the filesystem operation ends — so unbounded buffering
+  converts a burst into latency plus transient memory, not permanent growth.
+- The bounded alternative is worse for this library specifically.
+  `.bufferingNewest(n)` drops silently, and what it drops includes the
+  `mustScanSubDirectories` element telling a consumer its baseline is stale.
+  That turns a visible backlog into silent divergence — the exact failure the
+  condition exists to prevent.
+- FSEvents already has bounded queues upstream and *reports* their overflow.
+  A second drop point in this layer duplicates the mechanism minus the
+  reporting.
+
+The one case that would justify revisiting: a consumer that stops draining
+entirely while the stream stays alive. Growth is then unbounded in time rather
+than in burst size — but that is a consumer bug, and a buffering policy would
+mask it rather than fix it. The useful response would be a way to observe the
+backlog.
+
 ## Gotchas
 
 1. **`FSEventStreamStop` blocks** until in-flight callbacks finish. Avoid it on
    the main thread in latency-sensitive code, and see the deadlock invariant
    above.
-2. **`FSEventStreamStart` can fail.** If it returns false, `FSEventStreamRelease`
-   must still be called or the CF object leaks. A failure at either creation
-   step must reach the caller: a consumer holding an `AsyncStream` that never
-   yields and never finishes hangs in `for await` forever. Since 3.0 the
-   factories throw, which is only possible because creation happens
+2. **`FSEventStreamStart` can fail, and the failure path needs `Invalidate`.**
+   By the time `Start` runs, `FSEventStreamSetDispatchQueue` has already
+   scheduled the stream, and the headers are explicit: *"you must eventually
+   call FSEventStreamInvalidate() and it is an error to call
+   FSEventStreamInvalidate() without having the stream either scheduled on a
+   runloop or a dispatch queue."* So the error path is
+   `Invalidate` → `Release`, the same order as `deinit` minus the `Stop`.
+   Releasing alone leaves the queue holding the stream, so the context's
+   release callback never runs and the handler box — with whatever it captures
+   — leaks with it. Do not "simplify" this by setting the queue to `NULL`
+   first; the header warns against that ordering specifically.
+
+   This library shipped that bug from the beginning and no test could see it,
+   because the live-stream counter is only incremented *after* a successful
+   start. Errors-only paths need their own accounting.
+
+   A failure must also reach the caller: a consumer holding an `AsyncStream`
+   that never yields and never finishes hangs in `for await` forever. Since 3.0
+   the factories throw, which is only possible because creation happens
    synchronously in the caller's frame — see "One shape".
 3. **`kFSEventStreamCreateFlagFileEvents` is essential.** Without it you get
    directory-level notifications only.
